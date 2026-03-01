@@ -145,8 +145,10 @@ export interface Resource {
 
 export interface MapTile {
   name: string;
+  skin: string;
   x: number;
   y: number;
+  layer: string;
   content?: {
     type: string;
     code: string;

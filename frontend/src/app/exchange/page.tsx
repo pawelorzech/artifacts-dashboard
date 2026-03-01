@@ -33,6 +33,7 @@ import {
   usePriceHistory,
 } from "@/hooks/use-exchange";
 import { PriceChart } from "@/components/exchange/price-chart";
+import { GameIcon } from "@/components/ui/game-icon";
 import type { GEOrder } from "@/lib/types";
 
 function formatDate(dateStr: string): string {
@@ -93,7 +94,12 @@ function OrdersTable({
       <TableBody>
         {filtered.map((order) => (
           <TableRow key={order.id}>
-            <TableCell className="font-medium">{order.code}</TableCell>
+            <TableCell className="font-medium">
+              <div className="flex items-center gap-2">
+                <GameIcon type="item" code={order.code} size="sm" />
+                {order.code}
+              </div>
+            </TableCell>
             <TableCell>
               <Badge
                 variant="outline"
@@ -233,7 +239,7 @@ export default function ExchangePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="size-5 text-blue-400" />
+                  <GameIcon type="item" code={searchedItem} size="md" showTooltip={false} />
                   Price History: {searchedItem}
                 </CardTitle>
               </CardHeader>

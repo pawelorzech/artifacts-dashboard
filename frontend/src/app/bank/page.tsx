@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GameIcon } from "@/components/ui/game-icon";
 import { useBank } from "@/hooks/use-bank";
 
 interface BankItem {
@@ -172,7 +173,10 @@ export default function BankPage() {
                   className="py-3 px-3 hover:bg-accent/30 transition-colors"
                 >
                   <div className="space-y-1.5">
-                    <p className="text-sm font-medium text-foreground truncate">
+                    <div className="flex justify-center">
+                      <GameIcon type="item" code={item.code} size="lg" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground truncate text-center">
                       {item.code}
                     </p>
                     <div className="flex items-center justify-between">

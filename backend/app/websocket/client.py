@@ -65,6 +65,16 @@ class GameWebSocketClient:
                 pass
         logger.info("Game WebSocket client stopped")
 
+    async def reconnect_with_token(self, token: str) -> None:
+        """Update the token and reconnect."""
+        self._token = token
+        # Close current connection to trigger reconnect with new token
+        if self._ws is not None:
+            try:
+                await self._ws.close()
+            except Exception:
+                pass
+
     # ------------------------------------------------------------------
     # Connection loop
     # ------------------------------------------------------------------

@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { EQUIPMENT_SLOTS } from "@/lib/constants";
 import type { Character } from "@/lib/types";
+import { GameIcon } from "@/components/ui/game-icon";
 import { cn } from "@/lib/utils";
 
 interface EquipmentGridProps {
@@ -54,6 +55,7 @@ export function EquipmentGrid({ character }: EquipmentGridProps) {
                   </span>
                 ) : (
                   <div className="flex items-center gap-1.5">
+                    <GameIcon type="item" code={itemCode} size="md" />
                     <span className="text-xs font-medium text-foreground truncate">
                       {itemCode}
                     </span>

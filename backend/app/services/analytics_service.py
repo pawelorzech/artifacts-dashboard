@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 class AnalyticsService:
     """Provides analytics derived from character snapshot time-series data."""
 
+    async def get_tracked_characters(
+        self,
+        db: AsyncSession,
+    ) -> list[str]:
+        """Return distinct character names that have snapshots."""
+        stmt = select(CharacterSnapshot.name).distinct()
+        result = await db.execute(stmt)
+        return [row[0] for row in result.all()]
+
     async def get_xp_history(
         self,
         db: AsyncSession,

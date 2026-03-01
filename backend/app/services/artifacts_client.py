@@ -59,10 +59,11 @@ class ArtifactsClient:
     RETRY_BASE_DELAY: float = 1.0
 
     def __init__(self) -> None:
+        self._token = settings.artifacts_token
         self._client = httpx.AsyncClient(
             base_url=settings.artifacts_api_url,
             headers={
-                "Authorization": f"Bearer {settings.artifacts_token}",
+                "Authorization": f"Bearer {self._token}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
@@ -76,6 +77,28 @@ class ArtifactsClient:
             max_requests=settings.data_rate_limit,
             window_seconds=settings.data_rate_window,
         )
+
+    @property
+    def has_token(self) -> bool:
+        return bool(self._token)
+
+    @property
+    def token_source(self) -> str:
+        if not self._token:
+            return "none"
+        if settings.artifacts_token and self._token == settings.artifacts_token:
+            return "env"
+        return "user"
+
+    def set_token(self, token: str) -> None:
+        """Update the API token at runtime."""
+        self._token = token
+        self._client.headers["Authorization"] = f"Bearer {token}"
+
+    def clear_token(self) -> None:
+        """Revert to the env token (or empty if none)."""
+        self._token = settings.artifacts_token
+        self._client.headers["Authorization"] = f"Bearer {self._token}"
 
     # ------------------------------------------------------------------
     # Low-level request helpers

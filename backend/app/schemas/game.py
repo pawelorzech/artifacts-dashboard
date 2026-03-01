@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # --- Inventory ---
@@ -101,9 +102,21 @@ class ContentSchema(BaseModel):
 
 class MapSchema(BaseModel):
     name: str = ""
+    skin: str = ""
     x: int
     y: int
+    layer: str = "overworld"
     content: ContentSchema | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _extract_interactions(cls, data: Any) -> Any:
+        """The Artifacts API nests content under interactions.content."""
+        if isinstance(data, dict) and "interactions" in data:
+            interactions = data.get("interactions") or {}
+            if "content" not in data or data["content"] is None:
+                data["content"] = interactions.get("content")
+        return data
 
 
 # --- Characters ---

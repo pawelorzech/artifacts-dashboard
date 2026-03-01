@@ -2,6 +2,10 @@
 
 > Dashboard & automation platform for [Artifacts MMO](https://artifactsmmo.com) — control, automate, and analyze your characters through a beautiful web interface.
 
+**[Live Demo — artifacts.gtf.ovh](https://artifacts.gtf.ovh)** | **[GitHub](https://github.com/pawelorzech/artifacts-dashboard)**
+
+Free to use — just log in with your Artifacts MMO token and start automating.
+
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
@@ -41,7 +45,7 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/artifacts-dashboard.git
+   git clone https://github.com/pawelorzech/artifacts-dashboard.git
    cd artifacts-dashboard
    ```
 

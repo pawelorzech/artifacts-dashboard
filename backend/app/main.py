@@ -29,6 +29,7 @@ from app.api.ws import router as ws_router
 from app.api.exchange import router as exchange_router
 from app.api.events import router as events_router
 from app.api.logs import router as logs_router
+from app.api.auth import router as auth_router
 
 # Automation engine
 from app.engine.pathfinder import Pathfinder
@@ -235,6 +236,7 @@ app.include_router(ws_router)
 app.include_router(exchange_router)
 app.include_router(events_router)
 app.include_router(logs_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")

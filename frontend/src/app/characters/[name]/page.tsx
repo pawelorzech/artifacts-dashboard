@@ -15,6 +15,7 @@ import { StatsPanel } from "@/components/character/stats-panel";
 import { EquipmentGrid } from "@/components/character/equipment-grid";
 import { InventoryGrid } from "@/components/character/inventory-grid";
 import { SkillBars } from "@/components/character/skill-bars";
+import { CharacterAutomations } from "@/components/character/character-automations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,6 +124,9 @@ export default function CharacterPage({
         <InventoryGrid character={character} />
         <SkillBars character={character} />
       </div>
+
+      {/* Automations */}
+      <CharacterAutomations characterName={decodedName} character={character} />
 
       {/* Manual Actions */}
       <Card>

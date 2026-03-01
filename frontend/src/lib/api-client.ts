@@ -84,6 +84,40 @@ async function deleteApi(path: string): Promise<void> {
   }
 }
 
+// ---------- Auth API ----------
+
+export interface AuthStatus {
+  has_token: boolean;
+  source: "env" | "user" | "none";
+}
+
+export interface SetTokenResponse {
+  success: boolean;
+  source: string;
+  account?: string | null;
+  error?: string | null;
+}
+
+export function getAuthStatus(): Promise<AuthStatus> {
+  return fetchApi<AuthStatus>("/api/auth/status");
+}
+
+export async function setAuthToken(token: string): Promise<SetTokenResponse> {
+  return postApi<SetTokenResponse>("/api/auth/token", { token });
+}
+
+export async function clearAuthToken(): Promise<AuthStatus> {
+  const response = await fetch(`${API_URL}/api/auth/token`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+  return response.json() as Promise<AuthStatus>;
+}
+
+// ---------- Characters API ----------
+
 export function getCharacters(): Promise<Character[]> {
   return fetchApi<Character[]>("/api/characters");
 }
@@ -185,37 +219,43 @@ export function getAutomationLogs(
 
 // ---------- Grand Exchange API ----------
 
-export function getExchangeOrders(): Promise<GEOrder[]> {
-  return fetchApi<GEOrder[]>("/api/exchange/orders");
+export async function getExchangeOrders(): Promise<GEOrder[]> {
+  const res = await fetchApi<{ orders: GEOrder[] }>("/api/exchange/orders");
+  return res.orders;
 }
 
-export function getExchangeHistory(): Promise<GEOrder[]> {
-  return fetchApi<GEOrder[]>("/api/exchange/history");
+export async function getExchangeHistory(): Promise<GEOrder[]> {
+  const res = await fetchApi<{ history: GEOrder[] }>("/api/exchange/history");
+  return res.history;
 }
 
-export function getPriceHistory(itemCode: string): Promise<PricePoint[]> {
-  return fetchApi<PricePoint[]>(
+export async function getPriceHistory(itemCode: string): Promise<PricePoint[]> {
+  const res = await fetchApi<{ entries: PricePoint[] }>(
     `/api/exchange/prices/${encodeURIComponent(itemCode)}`
   );
+  return res.entries;
 }
 
 // ---------- Events API ----------
 
-export function getEvents(): Promise<GameEvent[]> {
-  return fetchApi<GameEvent[]>("/api/events");
+export async function getEvents(): Promise<GameEvent[]> {
+  const res = await fetchApi<{ events: GameEvent[] }>("/api/events");
+  return res.events;
 }
 
-export function getEventHistory(): Promise<GameEvent[]> {
-  return fetchApi<GameEvent[]>("/api/events/history");
+export async function getEventHistory(): Promise<GameEvent[]> {
+  const res = await fetchApi<{ events: GameEvent[] }>("/api/events/history");
+  return res.events;
 }
 
 // ---------- Logs & Analytics API ----------
 
-export function getLogs(characterName?: string): Promise<ActionLog[]> {
+export async function getLogs(characterName?: string): Promise<ActionLog[]> {
   const params = new URLSearchParams();
   if (characterName) params.set("character", characterName);
   const qs = params.toString();
-  return fetchApi<ActionLog[]>(`/api/logs${qs ? `?${qs}` : ""}`);
+  const data = await fetchApi<ActionLog[] | { logs?: ActionLog[] }>(`/api/logs${qs ? `?${qs}` : ""}`);
+  return Array.isArray(data) ? data : (data?.logs ?? []);
 }
 
 export function getAnalytics(

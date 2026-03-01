@@ -8,6 +8,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { GameIcon } from "@/components/ui/game-icon";
 import { cn } from "@/lib/utils";
 import type { Character } from "@/lib/types";
 
@@ -58,16 +59,14 @@ export function InventoryGrid({ character }: InventoryGridProps) {
                 )}
               >
                 {item && (
-                  <>
-                    <span className="text-[9px] font-medium text-foreground text-center leading-tight truncate w-full">
-                      {item.code}
-                    </span>
+                  <div className="relative flex items-center justify-center">
+                    <GameIcon type="item" code={item.code} size="md" />
                     {item.quantity > 1 && (
-                      <span className="text-[9px] text-muted-foreground">
-                        x{item.quantity}
+                      <span className="absolute -bottom-0.5 -right-0.5 rounded bg-background/80 px-0.5 text-[9px] font-medium text-muted-foreground leading-tight">
+                        {item.quantity}
                       </span>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             );

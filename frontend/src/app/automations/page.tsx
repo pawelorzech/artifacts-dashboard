@@ -9,6 +9,8 @@ import {
   Pickaxe,
   Bot,
   Loader2,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,13 +31,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   useAutomations,
   useAutomationStatuses,
   useDeleteAutomation,
-  useControlAutomation,
 } from "@/hooks/use-automations";
 import { RunControls } from "@/components/automation/run-controls";
+import { AutomationGallery } from "@/components/automation/automation-gallery";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -101,109 +104,134 @@ export default function AutomationsPage() {
         </Button>
       </div>
 
-      {error && (
-        <Card className="border-destructive bg-destructive/10 p-4">
-          <p className="text-sm text-destructive">
-            Failed to load automations. Make sure the backend is running.
-          </p>
-        </Card>
-      )}
+      <Tabs defaultValue="gallery">
+        <TabsList>
+          <TabsTrigger value="gallery" className="gap-1.5">
+            <LayoutGrid className="size-3.5" />
+            Gallery
+          </TabsTrigger>
+          <TabsTrigger value="active" className="gap-1.5">
+            <List className="size-3.5" />
+            My Automations
+            {automations && automations.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                {automations.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        </div>
-      )}
+        <TabsContent value="gallery" className="mt-6">
+          <AutomationGallery />
+        </TabsContent>
 
-      {automations && automations.length === 0 && !isLoading && (
-        <Card className="p-8 text-center">
-          <Bot className="size-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground mb-4">
-            No automations configured yet. Create one to get started.
-          </p>
-          <Button onClick={() => router.push("/automations/new")}>
-            <Plus className="size-4" />
-            Create Automation
-          </Button>
-        </Card>
-      )}
+        <TabsContent value="active" className="mt-6">
+          {error && (
+            <Card className="border-destructive bg-destructive/10 p-4">
+              <p className="text-sm text-destructive">
+                Failed to load automations. Make sure the backend is running.
+              </p>
+            </Card>
+          )}
 
-      {automations && automations.length > 0 && (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Character</TableHead>
-                <TableHead>Strategy</TableHead>
-                <TableHead>Status / Controls</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {automations.map((automation) => {
-                const status = statusMap.get(automation.id);
-                const currentStatus = status?.status ?? "stopped";
-                const actionsCount = status?.actions_count ?? 0;
+          {isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
 
-                return (
-                  <TableRow
-                    key={automation.id}
-                    className="cursor-pointer"
-                    onClick={() =>
-                      router.push(`/automations/${automation.id}`)
-                    }
-                  >
-                    <TableCell className="font-medium">
-                      {automation.name}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {automation.character_name}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        {STRATEGY_ICONS[automation.strategy_type] ?? (
-                          <Bot className="size-4" />
-                        )}
-                        <span
-                          className={cn(
-                            "capitalize text-sm",
-                            STRATEGY_COLORS[automation.strategy_type]
-                          )}
-                        >
-                          {automation.strategy_type}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <RunControls
-                        automationId={automation.id}
-                        status={currentStatus}
-                        actionsCount={actionsCount}
-                      />
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-destructive"
+          {automations && automations.length === 0 && !isLoading && (
+            <Card className="p-8 text-center">
+              <Bot className="size-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground mb-4">
+                No automations configured yet. Pick one from the Gallery or
+                create a custom one.
+              </p>
+              <Button onClick={() => router.push("/automations/new")}>
+                <Plus className="size-4" />
+                Create Automation
+              </Button>
+            </Card>
+          )}
+
+          {automations && automations.length > 0 && (
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Character</TableHead>
+                    <TableHead>Strategy</TableHead>
+                    <TableHead>Status / Controls</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {automations.map((automation) => {
+                    const status = statusMap.get(automation.id);
+                    const currentStatus = status?.status ?? "stopped";
+                    const actionsCount = status?.actions_count ?? 0;
+
+                    return (
+                      <TableRow
+                        key={automation.id}
+                        className="cursor-pointer"
                         onClick={() =>
-                          setDeleteTarget({
-                            id: automation.id,
-                            name: automation.name,
-                          })
+                          router.push(`/automations/${automation.id}`)
                         }
                       >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
+                        <TableCell className="font-medium">
+                          {automation.name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {automation.character_name}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {STRATEGY_ICONS[automation.strategy_type] ?? (
+                              <Bot className="size-4" />
+                            )}
+                            <span
+                              className={cn(
+                                "capitalize text-sm",
+                                STRATEGY_COLORS[automation.strategy_type]
+                              )}
+                            >
+                              {automation.strategy_type}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <RunControls
+                            automationId={automation.id}
+                            status={currentStatus}
+                            actionsCount={actionsCount}
+                          />
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() =>
+                              setDeleteTarget({
+                                id: automation.id,
+                                name: automation.name,
+                              })
+                            }
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <Dialog
         open={deleteTarget !== null}

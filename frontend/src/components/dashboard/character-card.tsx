@@ -6,6 +6,7 @@ import { MapPin, Coins, Swords, Shield, Clock, Target, Bot, Pickaxe } from "luci
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { GameIcon } from "@/components/ui/game-icon";
 import type { Character, AutomationStatus } from "@/lib/types";
 import { SKILLS, SKILL_COLOR_TEXT_MAP } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -96,7 +97,10 @@ export function CharacterCard({ character, automationStatus }: CharacterCardProp
     >
       <CardHeader className="pb-0 pt-0 px-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{character.name}</CardTitle>
+          <div className="flex items-center gap-2">
+            <GameIcon type="character" code={character.skin} size="md" showTooltip={false} />
+            <CardTitle className="text-base">{character.name}</CardTitle>
+          </div>
           <div className="flex items-center gap-1.5">
             {automationStatus &&
               automationStatus.status !== "stopped" && (
@@ -236,12 +240,14 @@ export function CharacterCard({ character, automationStatus }: CharacterCardProp
         {(character.weapon_slot || character.shield_slot) && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {character.weapon_slot && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+                <GameIcon type="item" code={character.weapon_slot} size="sm" showTooltip={false} />
                 {character.weapon_slot}
               </Badge>
             )}
             {character.shield_slot && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
+                <GameIcon type="item" code={character.shield_slot} size="sm" showTooltip={false} />
                 {character.shield_slot}
               </Badge>
             )}

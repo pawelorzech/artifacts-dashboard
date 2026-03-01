@@ -7,6 +7,8 @@ import {
   useWebSocket,
   type ConnectionStatus,
 } from "@/hooks/use-websocket";
+import { AuthProvider } from "@/components/auth/auth-provider";
+import { ApiKeyGate } from "@/components/auth/api-key-gate";
 
 interface WebSocketContextValue {
   status: ConnectionStatus;
@@ -53,10 +55,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <WebSocketProvider>
-        {children}
+      <AuthProvider>
         <Toaster theme="dark" position="bottom-right" richColors />
-      </WebSocketProvider>
+        <ApiKeyGate>
+          <WebSocketProvider>{children}</WebSocketProvider>
+        </ApiKeyGate>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
