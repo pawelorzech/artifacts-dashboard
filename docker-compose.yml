@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-artifacts}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-artifacts}
+      POSTGRES_DB: ${POSTGRES_DB:-artifacts}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-artifacts}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://artifacts:artifacts@db:5432/artifacts}
+      - ARTIFACTS_TOKEN=${ARTIFACTS_TOKEN}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    restart: unless-stopped
+
+volumes:
+  pgdata:
