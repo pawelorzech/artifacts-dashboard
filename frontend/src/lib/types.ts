@@ -257,9 +257,20 @@ export interface GEOrder {
   id: string;
   code: string;
   type: "buy" | "sell";
+  account?: string | null;
   price: number;
   quantity: number;
   created_at: string;
+}
+
+export interface GEHistoryEntry {
+  order_id: string;
+  seller: string;
+  buyer: string;
+  code: string;
+  quantity: number;
+  price: number;
+  sold_at: string;
 }
 
 export interface PricePoint {
@@ -272,6 +283,26 @@ export interface PricePoint {
 
 // ---------- Event Types ----------
 
+export interface ActiveGameEvent {
+  name: string;
+  code: string;
+  content: { type: string; code: string };
+  maps: { map_id: number; x: number; y: number; layer: string; skin: string }[];
+  duration: number;
+  rate: number;
+}
+
+export interface HistoricalEvent {
+  id: number;
+  event_type: string;
+  event_data: Record<string, unknown>;
+  character_name?: string;
+  map_x?: number;
+  map_y?: number;
+  created_at: string;
+}
+
+/** @deprecated Use ActiveGameEvent or HistoricalEvent */
 export interface GameEvent {
   id?: string;
   type: string;

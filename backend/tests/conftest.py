@@ -6,7 +6,11 @@ from app.engine.pathfinder import Pathfinder
 from app.schemas.game import (
     CharacterSchema,
     ContentSchema,
+    CraftItem,
+    CraftSchema,
+    EffectSchema,
     InventorySlot,
+    ItemSchema,
     MapSchema,
     MonsterSchema,
     ResourceSchema,
@@ -116,5 +120,39 @@ def pathfinder_with_maps(make_map_tile):
         pf = Pathfinder()
         pf.load_maps(tiles)
         return pf
+
+    return _factory
+
+
+@pytest.fixture
+def make_item():
+    """Factory fixture that returns an ItemSchema with sensible defaults."""
+
+    def _factory(**overrides) -> ItemSchema:
+        defaults = {
+            "name": "Iron Sword",
+            "code": "iron_sword",
+            "level": 10,
+            "type": "weapon",
+            "subtype": "sword",
+            "effects": [],
+            "craft": None,
+        }
+        defaults.update(overrides)
+
+        # Convert raw effect dicts to EffectSchema instances if needed
+        raw_effects = defaults.get("effects", [])
+        if raw_effects and isinstance(raw_effects[0], dict):
+            defaults["effects"] = [EffectSchema(**e) for e in raw_effects]
+
+        # Convert raw craft dict to CraftSchema if needed
+        raw_craft = defaults.get("craft")
+        if raw_craft and isinstance(raw_craft, dict):
+            if "items" in raw_craft and raw_craft["items"]:
+                if isinstance(raw_craft["items"][0], dict):
+                    raw_craft["items"] = [CraftItem(**ci) for ci in raw_craft["items"]]
+            defaults["craft"] = CraftSchema(**raw_craft)
+
+        return ItemSchema(**defaults)
 
     return _factory

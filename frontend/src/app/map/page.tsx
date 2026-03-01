@@ -41,8 +41,7 @@ const CONTENT_COLORS: Record<string, string> = {
 
 const EMPTY_COLOR = "#1f2937";
 const CHARACTER_COLOR = "#facc15";
-const GRID_LINE_COLOR = "#374151";
-const BASE_CELL_SIZE = 18;
+const BASE_CELL_SIZE = 40;
 const IMAGE_BASE = "https://artifactsmmo.com/images";
 
 const LEGEND_ITEMS = [
@@ -83,7 +82,8 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   if (cached) return Promise.resolve(cached);
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // Note: do NOT set crossOrigin – the CDN doesn't send CORS headers,
+    // and we only need to draw the images on canvas (not read pixel data).
     img.onload = () => {
       imageCache.set(url, img);
       resolve(img);
@@ -147,7 +147,7 @@ export default function MapPage() {
   const rafRef = useRef<number>(0);
   const dragDistRef = useRef(0);
 
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.5);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -295,14 +295,15 @@ export default function MapPage() {
       if (px + cellSize < 0 || py + cellSize < 0 || px > width || py > height)
         continue;
 
-      // Try to draw skin image
+      // Draw skin image – seamless tiles, no gaps
       const skinImg = tile.skin ? imageCache.get(skinUrl(tile.skin)) : null;
 
       if (skinImg) {
         ctx.drawImage(skinImg, px, py, cellSize, cellSize);
       } else {
-        ctx.fillStyle = getTileColor(tile);
-        ctx.fillRect(px, py, cellSize - 1, cellSize - 1);
+        // Fallback: dark ground color for tiles without skin images
+        ctx.fillStyle = EMPTY_COLOR;
+        ctx.fillRect(px, py, cellSize, cellSize);
       }
 
       // Content icon overlay
@@ -315,70 +316,79 @@ export default function MapPage() {
             const iconSize = cellSize * 0.6;
             const iconX = px + (cellSize - iconSize) / 2;
             const iconY = py + (cellSize - iconSize) / 2;
+            // Drop shadow for icon readability
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
+            ctx.shadowBlur = 3;
             ctx.drawImage(iconImg, iconX, iconY, iconSize, iconSize);
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
           }
-        } else if (!skinImg) {
-          // For bank/workshop/etc without skin, draw a colored indicator dot
-          const dotRadius = Math.max(2, cellSize * 0.15);
+        } else {
+          // For bank/workshop/etc – small colored badge in bottom-right
+          const badgeSize = Math.max(6, cellSize * 0.25);
+          const badgeX = px + cellSize - badgeSize - 2;
+          const badgeY = py + cellSize - badgeSize - 2;
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
           ctx.beginPath();
-          ctx.arc(
-            px + cellSize / 2,
-            py + cellSize / 2,
-            dotRadius,
-            0,
-            Math.PI * 2
-          );
+          ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2 + 1, 0, Math.PI * 2);
+          ctx.fill();
           ctx.fillStyle = CONTENT_COLORS[tile.content.type] ?? "#fff";
+          ctx.beginPath();
+          ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
-      // Grid lines (subtler when images are shown)
-      if (cellSize > 10) {
-        ctx.strokeStyle = skinImg
-          ? "rgba(55, 65, 81, 0.3)"
-          : GRID_LINE_COLOR;
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(px, py, cellSize - 1, cellSize - 1);
-      }
-
-      // Selected tile highlight
+      // Selected tile highlight – bright outline
       if (
         selectedTile &&
         tile.x === selectedTile.tile.x &&
         tile.y === selectedTile.tile.y
       ) {
         ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(px + 1, py + 1, cellSize - 3, cellSize - 3);
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
       }
 
-      // Coordinate text at high zoom
-      if (cellSize >= 40) {
-        ctx.fillStyle = "rgba(255,255,255,0.6)";
-        ctx.font = `${Math.max(8, cellSize * 0.2)}px sans-serif`;
+      // Coordinate text at high zoom – text shadow for readability on tile images
+      if (cellSize >= 60) {
+        const fontSize = Math.max(8, cellSize * 0.18);
+        ctx.font = `${fontSize}px sans-serif`;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillText(`${tile.x},${tile.y}`, px + 3, py + 3);
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
         ctx.fillText(`${tile.x},${tile.y}`, px + 2, py + 2);
       }
 
       // Tile labels at very high zoom
-      if (cellSize >= 50 && (tile.name || tile.content?.code)) {
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.font = `bold ${Math.max(9, cellSize * 0.18)}px sans-serif`;
+      if (cellSize >= 80 && (tile.name || tile.content?.code)) {
+        const nameSize = Math.max(9, cellSize * 0.16);
+        ctx.font = `bold ${nameSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
         if (tile.name) {
+          // Text with shadow
+          ctx.fillStyle = "rgba(0,0,0,0.7)";
+          ctx.fillText(tile.name, px + cellSize / 2 + 1, py + cellSize - 1);
+          ctx.fillStyle = "rgba(255,255,255,0.9)";
           ctx.fillText(tile.name, px + cellSize / 2, py + cellSize - 2);
         }
         if (tile.content?.code) {
-          ctx.font = `${Math.max(8, cellSize * 0.15)}px sans-serif`;
-          ctx.fillStyle = "rgba(255,255,255,0.65)";
-          ctx.textBaseline = "bottom";
+          const codeSize = Math.max(8, cellSize * 0.13);
+          ctx.font = `${codeSize}px sans-serif`;
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.fillText(
+            tile.content.code,
+            px + cellSize / 2 + 1,
+            py + cellSize - 1 - Math.max(10, cellSize * 0.18)
+          );
+          ctx.fillStyle = "rgba(255,255,255,0.75)";
           ctx.fillText(
             tile.content.code,
             px + cellSize / 2,
-            py + cellSize - 2 - Math.max(10, cellSize * 0.2)
+            py + cellSize - 2 - Math.max(10, cellSize * 0.18)
           );
         }
       }
@@ -412,12 +422,15 @@ export default function MapPage() {
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Label
+        // Label with shadow for readability on tile images
         if (cellSize >= 14) {
-          ctx.fillStyle = "#fff";
-          ctx.font = `${Math.max(9, cellSize * 0.5)}px sans-serif`;
+          const labelFont = `bold ${Math.max(9, cellSize * 0.4)}px sans-serif`;
+          ctx.font = labelFont;
           ctx.textAlign = "center";
           ctx.textBaseline = "bottom";
+          ctx.fillStyle = "rgba(0,0,0,0.7)";
+          ctx.fillText(char.name, px + 1, py - radius - 2);
+          ctx.fillStyle = "#fff";
           ctx.fillText(char.name, px, py - radius - 3);
         }
       }
@@ -733,7 +746,7 @@ export default function MapPage() {
     const mouseY = e.clientY - rect.top;
 
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.3, Math.min(5, zoom * factor));
+    const newZoom = Math.max(0.1, Math.min(5, zoom * factor));
     const scale = newZoom / zoom;
 
     // Adjust offset so the point under cursor stays fixed
@@ -745,7 +758,7 @@ export default function MapPage() {
   }
 
   function resetView() {
-    setZoom(1);
+    setZoom(0.5);
     setOffset({ x: 0, y: 0 });
   }
 
@@ -778,7 +791,7 @@ export default function MapPage() {
           break;
         case "-":
           e.preventDefault();
-          setZoom((z) => Math.max(0.3, z * 0.87));
+          setZoom((z) => Math.max(0.1, z * 0.87));
           break;
         case "0":
           e.preventDefault();
@@ -965,7 +978,7 @@ export default function MapPage() {
             <Button
               size="icon-sm"
               variant="secondary"
-              onClick={() => setZoom((z) => Math.max(0.3, z * 0.83))}
+              onClick={() => setZoom((z) => Math.max(0.1, z * 0.83))}
             >
               <Minus className="size-4" />
             </Button>

@@ -3,10 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   getExchangeOrders,
+  getMyOrders,
   getExchangeHistory,
+  getSellHistory,
   getPriceHistory,
 } from "@/lib/api-client";
-import type { GEOrder, PricePoint } from "@/lib/types";
+import type { GEOrder, GEHistoryEntry, PricePoint } from "@/lib/types";
 
 export function useExchangeOrders() {
   return useQuery<GEOrder[]>({
@@ -16,10 +18,27 @@ export function useExchangeOrders() {
   });
 }
 
-export function useExchangeHistory() {
+export function useMyOrders() {
   return useQuery<GEOrder[]>({
+    queryKey: ["exchange", "my-orders"],
+    queryFn: getMyOrders,
+    refetchInterval: 10000,
+  });
+}
+
+export function useExchangeHistory() {
+  return useQuery<GEHistoryEntry[]>({
     queryKey: ["exchange", "history"],
     queryFn: getExchangeHistory,
+    refetchInterval: 30000,
+  });
+}
+
+export function useSellHistory(itemCode: string) {
+  return useQuery<GEHistoryEntry[]>({
+    queryKey: ["exchange", "sell-history", itemCode],
+    queryFn: () => getSellHistory(itemCode),
+    enabled: !!itemCode,
     refetchInterval: 30000,
   });
 }

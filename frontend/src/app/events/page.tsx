@@ -8,8 +8,10 @@ import {
   Clock,
   CalendarDays,
   Sparkles,
+  Swords,
+  Trees,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -20,10 +22,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useEvents, useEventHistory } from "@/hooks/use-events";
-import type { GameEvent } from "@/lib/types";
+import type { ActiveGameEvent, HistoricalEvent } from "@/lib/types";
+
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "-";
   return date.toLocaleDateString([], {
     month: "short",
     day: "numeric",
@@ -32,108 +42,83 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = then - now;
-
-  if (diffMs <= 0) return "Ended";
-
-  const diffS = Math.floor(diffMs / 1000);
-  if (diffS < 60) return `${diffS}s remaining`;
-  const diffM = Math.floor(diffS / 60);
-  if (diffM < 60) return `${diffM}m remaining`;
-  const diffH = Math.floor(diffM / 60);
-  if (diffH < 24) return `${diffH}h ${diffM % 60}m remaining`;
-  return `${Math.floor(diffH / 24)}d ${diffH % 24}h remaining`;
-}
-
-function getEventDescription(event: GameEvent): string {
-  if (event.data.description && typeof event.data.description === "string") {
-    return event.data.description;
-  }
-  if (event.data.name && typeof event.data.name === "string") {
-    return event.data.name;
-  }
-  return "Game event";
-}
-
-function getEventLocation(event: GameEvent): string | null {
-  if (event.data.map && typeof event.data.map === "string") {
-    return event.data.map;
-  }
-  if (
-    event.data.x !== undefined &&
-    event.data.y !== undefined
-  ) {
-    return `(${event.data.x}, ${event.data.y})`;
-  }
-  return null;
-}
-
-function getEventExpiry(event: GameEvent): string | null {
-  if (event.data.expiration && typeof event.data.expiration === "string") {
-    return event.data.expiration;
-  }
-  if (event.data.expires_at && typeof event.data.expires_at === "string") {
-    return event.data.expires_at;
-  }
-  return null;
-}
-
-const EVENT_TYPE_COLORS: Record<string, string> = {
-  portal: "text-purple-400 border-purple-500/30",
-  boss: "text-red-400 border-red-500/30",
-  resource: "text-green-400 border-green-500/30",
-  bonus: "text-amber-400 border-amber-500/30",
-  special: "text-cyan-400 border-cyan-500/30",
+const CONTENT_TYPE_STYLES: Record<string, { icon: typeof Swords; color: string }> = {
+  monster: { icon: Swords, color: "text-red-400 border-red-500/30" },
+  resource: { icon: Trees, color: "text-green-400 border-green-500/30" },
 };
 
-function getEventTypeStyle(type: string): string {
-  return EVENT_TYPE_COLORS[type] ?? "text-muted-foreground border-border";
-}
-
-function ActiveEventCard({ event }: { event: GameEvent }) {
-  const location = getEventLocation(event);
-  const expiry = getEventExpiry(event);
+function ActiveEventCard({ event }: { event: ActiveGameEvent }) {
+  const style = CONTENT_TYPE_STYLES[event.content.type] ?? {
+    icon: Sparkles,
+    color: "text-muted-foreground border-border",
+  };
+  const Icon = style.icon;
+  const locations = event.maps.slice(0, 3);
 
   return (
     <Card className="py-4">
       <CardContent className="px-4 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-amber-400" />
-            <Badge
-              variant="outline"
-              className={`capitalize ${getEventTypeStyle(event.type)}`}
-            >
-              {event.type}
+            <Icon className="size-4 text-amber-400" />
+            <Badge variant="outline" className={`capitalize ${style.color}`}>
+              {event.content.type}
             </Badge>
           </div>
-          {expiry && (
-            <div className="flex items-center gap-1 text-xs text-amber-400">
-              <Clock className="size-3" />
-              <span>{formatRelativeTime(expiry)}</span>
-            </div>
-          )}
-        </div>
-
-        <p className="text-sm text-foreground">{getEventDescription(event)}</p>
-
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          {location && (
-            <div className="flex items-center gap-1">
-              <MapPin className="size-3" />
-              <span>{location}</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <CalendarDays className="size-3" />
-            <span>{formatDate(event.created_at)}</span>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="size-3" />
+            <span>{formatDuration(event.duration)}</span>
           </div>
         </div>
+
+        <p className="text-sm font-medium text-foreground">{event.name}</p>
+        <p className="text-xs text-muted-foreground capitalize">
+          {event.content.code.replaceAll("_", " ")}
+        </p>
+
+        {locations.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {locations.map((m) => (
+              <div key={m.map_id} className="flex items-center gap-1">
+                <MapPin className="size-3" />
+                <span>({m.x}, {m.y})</span>
+              </div>
+            ))}
+            {event.maps.length > 3 && (
+              <span className="text-muted-foreground/60">
+                +{event.maps.length - 3} more
+              </span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function HistoryRow({ event }: { event: HistoricalEvent }) {
+  const location =
+    event.map_x !== undefined && event.map_y !== undefined
+      ? `(${event.map_x}, ${event.map_y})`
+      : "-";
+
+  return (
+    <TableRow>
+      <TableCell>
+        <Badge variant="outline" className="capitalize">
+          {event.event_type}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {event.character_name ?? "-"}
+      </TableCell>
+      <TableCell className="text-muted-foreground text-sm">
+        {location}
+      </TableCell>
+      <TableCell className="text-right text-muted-foreground text-sm">
+        {formatDate(event.created_at)}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -185,8 +170,8 @@ export default function EventsPage() {
 
         {activeEvents && activeEvents.length > 0 && (
           <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {activeEvents.map((event, idx) => (
-              <ActiveEventCard key={event.id ?? idx} event={event} />
+            {activeEvents.map((event) => (
+              <ActiveEventCard key={event.code} event={event} />
             ))}
           </div>
         )}
@@ -220,32 +205,14 @@ export default function EventsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Type</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>Character</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead className="text-right">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedHistory.map((event, idx) => (
-                  <TableRow key={event.id ?? idx}>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`capitalize ${getEventTypeStyle(event.type)}`}
-                      >
-                        {event.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {getEventDescription(event)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {getEventLocation(event) ?? "-"}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground text-sm">
-                      {formatDate(event.created_at)}
-                    </TableCell>
-                  </TableRow>
+                {sortedHistory.map((event) => (
+                  <HistoryRow key={event.id} event={event} />
                 ))}
               </TableBody>
             </Table>

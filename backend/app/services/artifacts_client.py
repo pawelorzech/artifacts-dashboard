@@ -203,13 +203,16 @@ class ArtifactsClient:
         self,
         path: str,
         page_size: int = 100,
+        params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch all pages from a paginated endpoint."""
         all_items: list[dict[str, Any]] = []
         page = 1
+        base_params = dict(params) if params else {}
 
         while True:
-            result = await self._get(path, params={"page": page, "size": page_size})
+            req_params = {**base_params, "page": page, "size": page_size}
+            result = await self._get(path, params=req_params)
             data = result.get("data", [])
             all_items.extend(data)
 
@@ -311,13 +314,30 @@ class ArtifactsClient:
         result = await self._get("/my/bank")
         return result.get("data", {})
 
+    async def browse_ge_orders(
+        self,
+        code: str | None = None,
+        order_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Browse ALL active Grand Exchange orders (public endpoint)."""
+        params: dict[str, Any] = {}
+        if code:
+            params["code"] = code
+        if order_type:
+            params["type"] = order_type
+        return await self._get_paginated("/grandexchange/orders", params=params)
+
     async def get_ge_orders(self) -> list[dict[str, Any]]:
-        result = await self._get("/my/grandexchange/orders")
-        return result.get("data", [])
+        """Get the authenticated account's own active GE orders."""
+        return await self._get_paginated("/my/grandexchange/orders")
 
     async def get_ge_history(self) -> list[dict[str, Any]]:
-        result = await self._get("/my/grandexchange/history")
-        return result.get("data", [])
+        """Get the authenticated account's GE transaction history."""
+        return await self._get_paginated("/my/grandexchange/history")
+
+    async def get_ge_sell_history(self, item_code: str) -> list[dict[str, Any]]:
+        """Get public sale history for a specific item (last 7 days)."""
+        return await self._get_paginated(f"/grandexchange/history/{item_code}")
 
     # ------------------------------------------------------------------
     # Action endpoints

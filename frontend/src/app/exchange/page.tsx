@@ -8,6 +8,7 @@ import {
   ShoppingCart,
   History,
   TrendingUp,
+  User,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,12 +30,13 @@ import {
 } from "@/components/ui/table";
 import {
   useExchangeOrders,
+  useMyOrders,
   useExchangeHistory,
   usePriceHistory,
 } from "@/hooks/use-exchange";
 import { PriceChart } from "@/components/exchange/price-chart";
 import { GameIcon } from "@/components/ui/game-icon";
-import type { GEOrder } from "@/lib/types";
+import type { GEOrder, GEHistoryEntry } from "@/lib/types";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -51,11 +53,13 @@ function OrdersTable({
   isLoading,
   search,
   emptyMessage,
+  showAccount,
 }: {
   orders: GEOrder[];
   isLoading: boolean;
   search: string;
   emptyMessage: string;
+  showAccount?: boolean;
 }) {
   const filtered = useMemo(() => {
     if (!search.trim()) return orders;
@@ -88,6 +92,7 @@ function OrdersTable({
           <TableHead>Type</TableHead>
           <TableHead className="text-right">Price</TableHead>
           <TableHead className="text-right">Quantity</TableHead>
+          {showAccount && <TableHead>Account</TableHead>}
           <TableHead className="text-right">Created</TableHead>
         </TableRow>
       </TableHeader>
@@ -118,6 +123,11 @@ function OrdersTable({
             <TableCell className="text-right tabular-nums">
               {order.quantity.toLocaleString()}
             </TableCell>
+            {showAccount && (
+              <TableCell className="text-muted-foreground text-sm">
+                {order.account ?? "—"}
+              </TableCell>
+            )}
             <TableCell className="text-right text-muted-foreground text-sm">
               {formatDate(order.created_at)}
             </TableCell>
@@ -128,8 +138,78 @@ function OrdersTable({
   );
 }
 
+function HistoryTable({
+  entries,
+  isLoading,
+  emptyMessage,
+}: {
+  entries: GEHistoryEntry[];
+  isLoading: boolean;
+  emptyMessage: string;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <History className="size-12 text-muted-foreground mb-4" />
+        <p className="text-muted-foreground text-sm">{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Item</TableHead>
+          <TableHead className="text-right">Price</TableHead>
+          <TableHead className="text-right">Quantity</TableHead>
+          <TableHead>Seller</TableHead>
+          <TableHead>Buyer</TableHead>
+          <TableHead className="text-right">Sold At</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {entries.map((entry) => (
+          <TableRow key={`${entry.order_id}-${entry.sold_at}`}>
+            <TableCell className="font-medium">
+              <div className="flex items-center gap-2">
+                <GameIcon type="item" code={entry.code} size="sm" />
+                {entry.code}
+              </div>
+            </TableCell>
+            <TableCell className="text-right tabular-nums text-amber-400">
+              {entry.price.toLocaleString()}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {entry.quantity.toLocaleString()}
+            </TableCell>
+            <TableCell className="text-muted-foreground text-sm">
+              {entry.seller}
+            </TableCell>
+            <TableCell className="text-muted-foreground text-sm">
+              {entry.buyer}
+            </TableCell>
+            <TableCell className="text-right text-muted-foreground text-sm">
+              {formatDate(entry.sold_at)}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default function ExchangePage() {
   const { data: orders, isLoading: loadingOrders, error: ordersError } = useExchangeOrders();
+  const { data: myOrders, isLoading: loadingMyOrders } = useMyOrders();
   const { data: history, isLoading: loadingHistory } = useExchangeHistory();
 
   const [marketSearch, setMarketSearch] = useState("");
@@ -172,9 +252,13 @@ export default function ExchangePage() {
             <ShoppingCart className="size-4" />
             Market
           </TabsTrigger>
+          <TabsTrigger value="my-orders" className="gap-1.5">
+            <User className="size-4" />
+            My Orders
+          </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5">
             <History className="size-4" />
-            My Orders
+            Trade History
           </TabsTrigger>
           <TabsTrigger value="prices" className="gap-1.5">
             <TrendingUp className="size-4" />
@@ -182,7 +266,7 @@ export default function ExchangePage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Market Tab */}
+        {/* Market Tab - Browse all public orders */}
         <TabsContent value="market" className="space-y-4">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -199,6 +283,7 @@ export default function ExchangePage() {
               orders={orders ?? []}
               isLoading={loadingOrders}
               search={marketSearch}
+              showAccount
               emptyMessage={
                 marketSearch.trim()
                   ? `No orders found for "${marketSearch}"`
@@ -208,13 +293,24 @@ export default function ExchangePage() {
           </Card>
         </TabsContent>
 
-        {/* My Orders Tab */}
-        <TabsContent value="history" className="space-y-4">
+        {/* My Orders Tab - User's own active orders */}
+        <TabsContent value="my-orders" className="space-y-4">
           <Card>
             <OrdersTable
-              orders={history ?? []}
-              isLoading={loadingHistory}
+              orders={myOrders ?? []}
+              isLoading={loadingMyOrders}
               search=""
+              emptyMessage="You have no active orders on the Grand Exchange."
+            />
+          </Card>
+        </TabsContent>
+
+        {/* Trade History Tab - User's transaction history */}
+        <TabsContent value="history" className="space-y-4">
+          <Card>
+            <HistoryTable
+              entries={history ?? []}
+              isLoading={loadingHistory}
               emptyMessage="No transaction history found."
             />
           </Card>

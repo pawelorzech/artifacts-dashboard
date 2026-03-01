@@ -3,76 +3,63 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from httpx import HTTPStatusError
+from fastapi import APIRouter, Query, Request
+from sqlalchemy import select
 
 from app.database import async_session_factory
+from app.models.automation import AutomationConfig, AutomationLog, AutomationRun
 from app.services.analytics_service import AnalyticsService
-from app.services.artifacts_client import ArtifactsClient
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
-def _get_client(request: Request) -> ArtifactsClient:
-    return request.app.state.artifacts_client
-
-
 @router.get("/")
-async def get_character_logs(
-    request: Request,
+async def get_logs(
     character: str = Query(default="", description="Character name to filter logs"),
     limit: int = Query(default=50, ge=1, le=200, description="Max entries to return"),
 ) -> dict[str, Any]:
-    """Get character action logs from the Artifacts API.
+    """Get automation action logs from the database.
 
-    This endpoint retrieves the character's recent action logs directly
-    from the game server.
+    Joins automation_logs -> automation_runs -> automation_configs
+    to include character_name with each log entry.
     """
-    client = _get_client(request)
+    async with async_session_factory() as db:
+        stmt = (
+            select(
+                AutomationLog.id,
+                AutomationLog.action_type,
+                AutomationLog.details,
+                AutomationLog.success,
+                AutomationLog.created_at,
+                AutomationConfig.character_name,
+            )
+            .join(AutomationRun, AutomationLog.run_id == AutomationRun.id)
+            .join(AutomationConfig, AutomationRun.config_id == AutomationConfig.id)
+            .order_by(AutomationLog.created_at.desc())
+            .limit(limit)
+        )
 
-    try:
         if character:
-            # Get logs for a specific character
-            char_data = await client.get_character(character)
-            return {
-                "character": character,
-                "logs": [],  # The API doesn't have a dedicated logs endpoint per character;
-                             # action data comes from the automation logs in our DB
-                "character_data": {
-                    "name": char_data.name,
-                    "level": char_data.level,
-                    "xp": char_data.xp,
-                    "gold": char_data.gold,
-                    "x": char_data.x,
-                    "y": char_data.y,
-                    "task": char_data.task,
-                    "task_progress": char_data.task_progress,
-                    "task_total": char_data.task_total,
-                },
+            stmt = stmt.where(AutomationConfig.character_name == character)
+
+        result = await db.execute(stmt)
+        rows = result.all()
+
+    return {
+        "logs": [
+            {
+                "id": row.id,
+                "character_name": row.character_name,
+                "action_type": row.action_type,
+                "details": row.details,
+                "success": row.success,
+                "created_at": row.created_at.isoformat(),
             }
-        else:
-            # Get all characters as a summary
-            characters = await client.get_characters()
-            return {
-                "characters": [
-                    {
-                        "name": c.name,
-                        "level": c.level,
-                        "xp": c.xp,
-                        "gold": c.gold,
-                        "x": c.x,
-                        "y": c.y,
-                    }
-                    for c in characters
-                ],
-            }
-    except HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=f"Artifacts API error: {exc.response.text}",
-        ) from exc
+            for row in rows
+        ],
+    }
 
 
 @router.get("/analytics")

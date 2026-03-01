@@ -27,8 +27,22 @@ class ExchangeService:
     # Order and history queries (pass-through to API with enrichment)
     # ------------------------------------------------------------------
 
-    async def get_orders(self, client: ArtifactsClient) -> list[dict[str, Any]]:
-        """Get all active GE orders for the account.
+    async def browse_orders(
+        self,
+        client: ArtifactsClient,
+        code: str | None = None,
+        order_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Browse all active GE orders on the market (public).
+
+        Returns
+        -------
+        List of order dicts from the Artifacts API.
+        """
+        return await client.browse_ge_orders(code=code, order_type=order_type)
+
+    async def get_my_orders(self, client: ArtifactsClient) -> list[dict[str, Any]]:
+        """Get the authenticated account's own active GE orders.
 
         Returns
         -------
@@ -44,6 +58,17 @@ class ExchangeService:
         List of history entry dicts from the Artifacts API.
         """
         return await client.get_ge_history()
+
+    async def get_sell_history(
+        self, client: ArtifactsClient, item_code: str
+    ) -> list[dict[str, Any]]:
+        """Get public sale history for a specific item.
+
+        Returns
+        -------
+        List of sale history dicts from the Artifacts API.
+        """
+        return await client.get_ge_sell_history(item_code)
 
     # ------------------------------------------------------------------
     # Price capture
@@ -63,7 +88,7 @@ class ExchangeService:
         Number of price entries captured.
         """
         try:
-            orders = await client.get_ge_orders()
+            orders = await client.browse_ge_orders()
         except Exception:
             logger.exception("Failed to fetch GE orders for price capture")
             return 0
@@ -88,7 +113,7 @@ class ExchangeService:
 
             price = order.get("price", 0)
             quantity = order.get("quantity", 0)
-            order_type = order.get("order", "")  # "buy" or "sell"
+            order_type = order.get("type", "")  # "buy" or "sell"
 
             item_prices[code]["volume"] += quantity
 

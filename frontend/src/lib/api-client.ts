@@ -11,8 +11,10 @@ import type {
   AutomationLog,
   AutomationStatus,
   GEOrder,
+  GEHistoryEntry,
   PricePoint,
-  GameEvent,
+  ActiveGameEvent,
+  HistoricalEvent,
   ActionLog,
   AnalyticsData,
 } from "./types";
@@ -224,8 +226,20 @@ export async function getExchangeOrders(): Promise<GEOrder[]> {
   return res.orders;
 }
 
-export async function getExchangeHistory(): Promise<GEOrder[]> {
-  const res = await fetchApi<{ history: GEOrder[] }>("/api/exchange/history");
+export async function getMyOrders(): Promise<GEOrder[]> {
+  const res = await fetchApi<{ orders: GEOrder[] }>("/api/exchange/my-orders");
+  return res.orders;
+}
+
+export async function getExchangeHistory(): Promise<GEHistoryEntry[]> {
+  const res = await fetchApi<{ history: GEHistoryEntry[] }>("/api/exchange/history");
+  return res.history;
+}
+
+export async function getSellHistory(itemCode: string): Promise<GEHistoryEntry[]> {
+  const res = await fetchApi<{ history: GEHistoryEntry[] }>(
+    `/api/exchange/sell-history/${encodeURIComponent(itemCode)}`
+  );
   return res.history;
 }
 
@@ -238,13 +252,13 @@ export async function getPriceHistory(itemCode: string): Promise<PricePoint[]> {
 
 // ---------- Events API ----------
 
-export async function getEvents(): Promise<GameEvent[]> {
-  const res = await fetchApi<{ events: GameEvent[] }>("/api/events");
+export async function getEvents(): Promise<ActiveGameEvent[]> {
+  const res = await fetchApi<{ events: ActiveGameEvent[] }>("/api/events");
   return res.events;
 }
 
-export async function getEventHistory(): Promise<GameEvent[]> {
-  const res = await fetchApi<{ events: GameEvent[] }>("/api/events/history");
+export async function getEventHistory(): Promise<HistoricalEvent[]> {
+  const res = await fetchApi<{ events: HistoricalEvent[] }>("/api/events/history");
   return res.events;
 }
 
