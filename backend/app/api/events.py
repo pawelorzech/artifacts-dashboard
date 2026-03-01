@@ -7,23 +7,19 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from httpx import HTTPStatusError
 from sqlalchemy import select
 
+from app.api.deps import get_user_client
 from app.database import async_session_factory
 from app.models.event_log import EventLog
-from app.services.artifacts_client import ArtifactsClient
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
-def _get_client(request: Request) -> ArtifactsClient:
-    return request.app.state.artifacts_client
-
-
 @router.get("/")
 async def get_active_events(request: Request) -> dict[str, Any]:
     """Get currently active game events from the Artifacts API."""
-    client = _get_client(request)
+    client = get_user_client(request)
 
     try:
         events = await client.get_events()

@@ -256,12 +256,36 @@ class TestCraftingStrategyDeposit:
         ])
         item = _make_craftable_item(materials=[("iron_ore", 3)])
         strategy = CraftingStrategy(
+            {"item_code": "iron_sword", "quantity": 5},  # quantity > crafted
+            pf,
+            items_data=[item],
+        )
+        strategy._state = strategy._state.__class__("deposit")
+        strategy._crafted_count = 2  # Still more to craft
+
+        char = make_character(
+            x=10, y=0,
+            inventory=[InventorySlot(slot=0, code="iron_sword", quantity=2)],
+        )
+
+        plan = await strategy.next_action(char)
+        assert plan.action_type == ActionType.DEPOSIT_ITEM
+        assert plan.params["code"] == "iron_sword"
+
+    @pytest.mark.asyncio
+    async def test_complete_after_all_deposited(self, make_character, pathfinder_with_maps):
+        pf = pathfinder_with_maps([
+            (5, 5, "workshop", "weaponcrafting"),
+            (10, 0, "bank", "bank"),
+        ])
+        item = _make_craftable_item(materials=[("iron_ore", 3)])
+        strategy = CraftingStrategy(
             {"item_code": "iron_sword", "quantity": 1},
             pf,
             items_data=[item],
         )
         strategy._state = strategy._state.__class__("deposit")
-        strategy._crafted_count = 1
+        strategy._crafted_count = 1  # Already crafted target quantity
 
         char = make_character(
             x=10, y=0,
@@ -269,8 +293,8 @@ class TestCraftingStrategyDeposit:
         )
 
         plan = await strategy.next_action(char)
-        assert plan.action_type == ActionType.DEPOSIT_ITEM
-        assert plan.params["code"] == "iron_sword"
+        # With crafted_count >= quantity, the top-level check returns COMPLETE
+        assert plan.action_type == ActionType.COMPLETE
 
 
 class TestCraftingStrategyNoLocations:

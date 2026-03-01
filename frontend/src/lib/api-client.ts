@@ -10,19 +10,49 @@ import type {
   AutomationRun,
   AutomationLog,
   AutomationStatus,
+  WorkflowConfig,
+  WorkflowRun,
+  WorkflowStatus,
+  PipelineConfig,
+  PipelineRun,
+  PipelineStatus,
   GEOrder,
   GEHistoryEntry,
   PricePoint,
   ActiveGameEvent,
   HistoricalEvent,
   ActionLog,
+  PaginatedLogs,
   AnalyticsData,
+  PaginatedErrors,
+  ErrorStats,
+  AppError,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const STORAGE_KEY = "artifacts-api-token";
+
+/** Read the user's API token from localStorage (browser-only). */
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(STORAGE_KEY);
+}
+
+/** Build headers including the per-user API token when available. */
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  const token = getStoredToken();
+  if (token) {
+    headers["X-API-Token"] = token;
+  }
+  return headers;
+}
+
 async function fetchApi<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`);
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: authHeaders(),
+  });
 
   if (!response.ok) {
     throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -34,7 +64,7 @@ async function fetchApi<T>(path: string): Promise<T> {
 async function postApi<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -55,7 +85,7 @@ async function postApi<T>(path: string, body?: unknown): Promise<T> {
 async function putApi<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -76,6 +106,7 @@ async function putApi<T>(path: string, body?: unknown): Promise<T> {
 async function deleteApi(path: string): Promise<void> {
   const response = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
 
   if (!response.ok) {
@@ -111,6 +142,7 @@ export async function setAuthToken(token: string): Promise<SetTokenResponse> {
 export async function clearAuthToken(): Promise<AuthStatus> {
   const response = await fetch(`${API_URL}/api/auth/token`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   if (!response.ok) {
     throw new Error(`API error: ${response.status}`);
@@ -219,6 +251,143 @@ export function getAutomationLogs(
   );
 }
 
+// ---------- Workflow API ----------
+
+export function getWorkflows(): Promise<WorkflowConfig[]> {
+  return fetchApi<WorkflowConfig[]>("/api/workflows");
+}
+
+export function getWorkflow(
+  id: number
+): Promise<{ config: WorkflowConfig; runs: WorkflowRun[] }> {
+  return fetchApi<{ config: WorkflowConfig; runs: WorkflowRun[] }>(
+    `/api/workflows/${id}`
+  );
+}
+
+export function createWorkflow(data: {
+  name: string;
+  character_name: string;
+  description?: string;
+  steps: Record<string, unknown>[];
+  loop?: boolean;
+  max_loops?: number;
+}): Promise<WorkflowConfig> {
+  return postApi<WorkflowConfig>("/api/workflows", data);
+}
+
+export function updateWorkflow(
+  id: number,
+  data: Partial<WorkflowConfig>
+): Promise<WorkflowConfig> {
+  return putApi<WorkflowConfig>(`/api/workflows/${id}`, data);
+}
+
+export function deleteWorkflow(id: number): Promise<void> {
+  return deleteApi(`/api/workflows/${id}`);
+}
+
+export function startWorkflow(id: number): Promise<WorkflowRun> {
+  return postApi<WorkflowRun>(`/api/workflows/${id}/start`);
+}
+
+export function stopWorkflow(id: number): Promise<void> {
+  return postApi(`/api/workflows/${id}/stop`);
+}
+
+export function pauseWorkflow(id: number): Promise<void> {
+  return postApi(`/api/workflows/${id}/pause`);
+}
+
+export function resumeWorkflow(id: number): Promise<void> {
+  return postApi(`/api/workflows/${id}/resume`);
+}
+
+export function getWorkflowStatuses(): Promise<WorkflowStatus[]> {
+  return fetchApi<WorkflowStatus[]>("/api/workflows/status/all");
+}
+
+export function getWorkflowStatus(id: number): Promise<WorkflowStatus> {
+  return fetchApi<WorkflowStatus>(`/api/workflows/${id}/status`);
+}
+
+export function getWorkflowLogs(
+  id: number,
+  limit: number = 100
+): Promise<AutomationLog[]> {
+  return fetchApi<AutomationLog[]>(
+    `/api/workflows/${id}/logs?limit=${limit}`
+  );
+}
+
+// ---------- Pipeline API ----------
+
+export function getPipelines(): Promise<PipelineConfig[]> {
+  return fetchApi<PipelineConfig[]>("/api/pipelines");
+}
+
+export function getPipeline(
+  id: number
+): Promise<{ config: PipelineConfig; runs: PipelineRun[] }> {
+  return fetchApi<{ config: PipelineConfig; runs: PipelineRun[] }>(
+    `/api/pipelines/${id}`
+  );
+}
+
+export function createPipeline(data: {
+  name: string;
+  description?: string;
+  stages: Record<string, unknown>[];
+  loop?: boolean;
+  max_loops?: number;
+}): Promise<PipelineConfig> {
+  return postApi<PipelineConfig>("/api/pipelines", data);
+}
+
+export function updatePipeline(
+  id: number,
+  data: Partial<PipelineConfig>
+): Promise<PipelineConfig> {
+  return putApi<PipelineConfig>(`/api/pipelines/${id}`, data);
+}
+
+export function deletePipeline(id: number): Promise<void> {
+  return deleteApi(`/api/pipelines/${id}`);
+}
+
+export function startPipeline(id: number): Promise<PipelineRun> {
+  return postApi<PipelineRun>(`/api/pipelines/${id}/start`);
+}
+
+export function stopPipeline(id: number): Promise<void> {
+  return postApi(`/api/pipelines/${id}/stop`);
+}
+
+export function pausePipeline(id: number): Promise<void> {
+  return postApi(`/api/pipelines/${id}/pause`);
+}
+
+export function resumePipeline(id: number): Promise<void> {
+  return postApi(`/api/pipelines/${id}/resume`);
+}
+
+export function getPipelineStatuses(): Promise<PipelineStatus[]> {
+  return fetchApi<PipelineStatus[]>("/api/pipelines/status/all");
+}
+
+export function getPipelineStatus(id: number): Promise<PipelineStatus> {
+  return fetchApi<PipelineStatus>(`/api/pipelines/${id}/status`);
+}
+
+export function getPipelineLogs(
+  id: number,
+  limit: number = 100
+): Promise<AutomationLog[]> {
+  return fetchApi<AutomationLog[]>(
+    `/api/pipelines/${id}/logs?limit=${limit}`
+  );
+}
+
 // ---------- Grand Exchange API ----------
 
 export async function getExchangeOrders(): Promise<GEOrder[]> {
@@ -264,12 +433,25 @@ export async function getEventHistory(): Promise<HistoricalEvent[]> {
 
 // ---------- Logs & Analytics API ----------
 
-export async function getLogs(characterName?: string): Promise<ActionLog[]> {
+export async function getLogs(filters?: {
+  character?: string;
+  type?: string;
+  page?: number;
+  size?: number;
+}): Promise<PaginatedLogs> {
   const params = new URLSearchParams();
-  if (characterName) params.set("character", characterName);
+  if (filters?.character) params.set("character", filters.character);
+  if (filters?.type) params.set("type", filters.type);
+  if (filters?.page) params.set("page", filters.page.toString());
+  if (filters?.size) params.set("size", filters.size.toString());
   const qs = params.toString();
-  const data = await fetchApi<ActionLog[] | { logs?: ActionLog[] }>(`/api/logs${qs ? `?${qs}` : ""}`);
-  return Array.isArray(data) ? data : (data?.logs ?? []);
+  const data = await fetchApi<PaginatedLogs>(`/api/logs${qs ? `?${qs}` : ""}`);
+  return {
+    logs: data.logs ?? [],
+    total: data.total ?? 0,
+    page: data.page ?? 1,
+    pages: data.pages ?? 1,
+  };
 }
 
 export function getAnalytics(
@@ -294,4 +476,40 @@ export function executeAction(
     `/api/characters/${encodeURIComponent(characterName)}/action`,
     { action, params }
   );
+}
+
+// ---------- App Errors API ----------
+
+export async function getAppErrors(filters?: {
+  severity?: string;
+  source?: string;
+  resolved?: string;
+  page?: number;
+  size?: number;
+}): Promise<PaginatedErrors> {
+  const params = new URLSearchParams();
+  if (filters?.severity) params.set("severity", filters.severity);
+  if (filters?.source) params.set("source", filters.source);
+  if (filters?.resolved) params.set("resolved", filters.resolved);
+  if (filters?.page) params.set("page", filters.page.toString());
+  if (filters?.size) params.set("size", filters.size.toString());
+  const qs = params.toString();
+  return fetchApi<PaginatedErrors>(`/api/errors${qs ? `?${qs}` : ""}`);
+}
+
+export function getErrorStats(): Promise<ErrorStats> {
+  return fetchApi<ErrorStats>("/api/errors/stats");
+}
+
+export function resolveError(id: number): Promise<AppError> {
+  return postApi<AppError>(`/api/errors/${id}/resolve`);
+}
+
+export function reportError(report: {
+  error_type: string;
+  message: string;
+  stack_trace?: string;
+  context?: Record<string, unknown>;
+}): Promise<void> {
+  return postApi("/api/errors/report", report);
 }

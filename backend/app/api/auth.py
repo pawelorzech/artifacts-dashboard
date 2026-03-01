@@ -1,8 +1,9 @@
-"""Auth endpoints for runtime API token management.
+"""Auth endpoints for per-user API token management.
 
-When no ARTIFACTS_TOKEN is set in the environment, users can provide
-their own token through the UI. The token is stored in memory only
-and must be re-sent if the backend restarts.
+Each user provides their own Artifacts API token via the frontend.
+The token is stored in the browser's localStorage and sent with every
+request as the ``X-API-Token`` header. The backend validates the token
+but does NOT store it globally — this allows true multi-user support.
 """
 
 import logging
@@ -12,7 +13,6 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.config import settings
-from app.services.artifacts_client import ArtifactsClient
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 class AuthStatus(BaseModel):
     has_token: bool
-    source: str  # "env", "user", or "none"
+    source: str  # "header", "env", or "none"
 
 
 class SetTokenRequest(BaseModel):
@@ -37,15 +37,24 @@ class SetTokenResponse(BaseModel):
 
 @router.get("/status", response_model=AuthStatus)
 async def auth_status(request: Request) -> AuthStatus:
-    client: ArtifactsClient = request.app.state.artifacts_client
-    return AuthStatus(
-        has_token=client.has_token,
-        source=client.token_source,
-    )
+    """Check whether the *requesting* client has a valid token.
+
+    The frontend sends the token in the ``X-API-Token`` header.
+    This endpoint tells the frontend whether that token is present.
+    """
+    token = request.headers.get("X-API-Token")
+    if token:
+        return AuthStatus(has_token=True, source="header")
+    return AuthStatus(has_token=False, source="none")
 
 
 @router.post("/token", response_model=SetTokenResponse)
-async def set_token(body: SetTokenRequest, request: Request) -> SetTokenResponse:
+async def validate_token(body: SetTokenRequest) -> SetTokenResponse:
+    """Validate an Artifacts API token.
+
+    Does NOT store the token on the server. The frontend is responsible
+    for persisting it in localStorage and sending it with every request.
+    """
     token = body.token.strip()
     if not token:
         return SetTokenResponse(success=False, source="none", error="Token cannot be empty")
@@ -78,37 +87,11 @@ async def set_token(body: SetTokenRequest, request: Request) -> SetTokenResponse
             error="Could not validate token. Check your network connection.",
         )
 
-    # Token is valid — apply it
-    client: ArtifactsClient = request.app.state.artifacts_client
-    client.set_token(token)
-
-    # Reconnect WebSocket with new token
-    game_ws_client = getattr(request.app.state, "game_ws_client", None)
-    if game_ws_client is not None:
-        try:
-            await game_ws_client.reconnect_with_token(token)
-        except Exception:
-            logger.exception("Failed to reconnect WebSocket with new token")
-
-    logger.info("API token updated via UI (source: user)")
+    logger.info("API token validated via UI")
     return SetTokenResponse(success=True, source="user")
 
 
 @router.delete("/token")
-async def clear_token(request: Request) -> AuthStatus:
-    client: ArtifactsClient = request.app.state.artifacts_client
-    client.clear_token()
-
-    # Reconnect WebSocket with env token (or empty)
-    game_ws_client = getattr(request.app.state, "game_ws_client", None)
-    if game_ws_client is not None and settings.artifacts_token:
-        try:
-            await game_ws_client.reconnect_with_token(settings.artifacts_token)
-        except Exception:
-            logger.exception("Failed to reconnect WebSocket after token clear")
-
-    logger.info("API token cleared, reverted to env")
-    return AuthStatus(
-        has_token=client.has_token,
-        source=client.token_source,
-    )
+async def clear_token() -> AuthStatus:
+    """No-op on the backend — the frontend clears its own localStorage."""
+    return AuthStatus(has_token=False, source="none")

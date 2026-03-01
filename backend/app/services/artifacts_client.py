@@ -53,6 +53,9 @@ class ArtifactsClient:
     """Async HTTP client for the Artifacts MMO API.
 
     Handles authentication, rate limiting, pagination, and retry logic.
+    Supports per-request token overrides for multi-user scenarios via
+    the ``with_token()`` method which creates a lightweight clone that
+    shares the underlying connection pool.
     """
 
     MAX_RETRIES: int = 3
@@ -63,7 +66,6 @@ class ArtifactsClient:
         self._client = httpx.AsyncClient(
             base_url=settings.artifacts_api_url,
             headers={
-                "Authorization": f"Bearer {self._token}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
@@ -78,6 +80,21 @@ class ArtifactsClient:
             window_seconds=settings.data_rate_window,
         )
 
+    # -- Multi-user support ------------------------------------------------
+
+    def with_token(self, token: str) -> "ArtifactsClient":
+        """Return a lightweight clone that uses *token* for requests.
+
+        The clone shares the httpx connection pool and rate limiters with the
+        original instance so there is no overhead in creating one per request.
+        """
+        clone = object.__new__(ArtifactsClient)
+        clone._token = token
+        clone._client = self._client          # shared connection pool
+        clone._action_limiter = self._action_limiter
+        clone._data_limiter = self._data_limiter
+        return clone
+
     @property
     def has_token(self) -> bool:
         return bool(self._token)
@@ -91,14 +108,12 @@ class ArtifactsClient:
         return "user"
 
     def set_token(self, token: str) -> None:
-        """Update the API token at runtime."""
+        """Update the default API token at runtime (used by background tasks)."""
         self._token = token
-        self._client.headers["Authorization"] = f"Bearer {token}"
 
     def clear_token(self) -> None:
         """Revert to the env token (or empty if none)."""
         self._token = settings.artifacts_token
-        self._client.headers["Authorization"] = f"Bearer {self._token}"
 
     # ------------------------------------------------------------------
     # Low-level request helpers
@@ -115,6 +130,10 @@ class ArtifactsClient:
     ) -> dict[str, Any]:
         last_exc: Exception | None = None
 
+        # Send Authorization per-request so clones created by with_token()
+        # use their own token without affecting other concurrent requests.
+        auth_headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
+
         for attempt in range(1, self.MAX_RETRIES + 1):
             await limiter.acquire()
             try:
@@ -123,6 +142,7 @@ class ArtifactsClient:
                     path,
                     json=json_body,
                     params=params,
+                    headers=auth_headers,
                 )
 
                 if response.status_code == 429:
@@ -135,6 +155,27 @@ class ArtifactsClient:
                     )
                     await asyncio.sleep(retry_after)
                     continue
+
+                # 498 = character in cooldown – wait and retry
+                if response.status_code == 498:
+                    try:
+                        body = response.json()
+                        cooldown = body.get("data", {}).get("cooldown", {})
+                        wait_seconds = cooldown.get("total_seconds", 5)
+                    except Exception:
+                        wait_seconds = 5
+                    logger.info(
+                        "Character cooldown on %s %s, waiting %.1fs (attempt %d/%d)",
+                        method,
+                        path,
+                        wait_seconds,
+                        attempt,
+                        self.MAX_RETRIES,
+                    )
+                    await asyncio.sleep(wait_seconds)
+                    if attempt < self.MAX_RETRIES:
+                        continue
+                    response.raise_for_status()
 
                 if response.status_code >= 500:
                     logger.warning(
@@ -428,11 +469,11 @@ class ArtifactsClient:
         return result.get("data", {})
 
     async def ge_buy(
-        self, name: str, code: str, quantity: int, price: int
+        self, name: str, order_id: str, quantity: int
     ) -> dict[str, Any]:
         result = await self._post_action(
             f"/my/{name}/action/grandexchange/buy",
-            json_body={"code": code, "quantity": quantity, "price": price},
+            json_body={"id": order_id, "quantity": quantity},
         )
         return result.get("data", {})
 
@@ -440,17 +481,26 @@ class ArtifactsClient:
         self, name: str, code: str, quantity: int, price: int
     ) -> dict[str, Any]:
         result = await self._post_action(
-            f"/my/{name}/action/grandexchange/sell",
+            f"/my/{name}/action/grandexchange/create-sell-order",
             json_body={"code": code, "quantity": quantity, "price": price},
         )
         return result.get("data", {})
 
-    async def ge_buy_order(
+    async def ge_create_buy_order(
         self, name: str, code: str, quantity: int, price: int
     ) -> dict[str, Any]:
         result = await self._post_action(
-            f"/my/{name}/action/grandexchange/buy",
+            f"/my/{name}/action/grandexchange/create-buy-order",
             json_body={"code": code, "quantity": quantity, "price": price},
+        )
+        return result.get("data", {})
+
+    async def ge_fill_buy_order(
+        self, name: str, order_id: str, quantity: int
+    ) -> dict[str, Any]:
+        result = await self._post_action(
+            f"/my/{name}/action/grandexchange/fill",
+            json_body={"id": order_id, "quantity": quantity},
         )
         return result.get("data", {})
 
@@ -499,6 +549,27 @@ class ArtifactsClient:
             json_body={"code": code, "quantity": quantity},
         )
         return result.get("data", {})
+
+    # ------------------------------------------------------------------
+    # Data endpoints - Action Logs
+    # ------------------------------------------------------------------
+
+    async def get_logs(
+        self,
+        page: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        """Get recent action logs for all characters (last 5000 actions)."""
+        return await self._get("/my/logs", params={"page": page, "size": size})
+
+    async def get_character_logs(
+        self,
+        name: str,
+        page: int = 1,
+        size: int = 100,
+    ) -> dict[str, Any]:
+        """Get recent action logs for a specific character."""
+        return await self._get(f"/my/logs/{name}", params={"page": page, "size": size})
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -97,8 +97,9 @@ class TestActionType:
         expected = {
             "move", "fight", "gather", "rest", "equip", "unequip",
             "use_item", "deposit_item", "withdraw_item", "craft", "recycle",
-            "ge_buy", "ge_sell", "ge_cancel",
-            "task_new", "task_trade", "task_complete", "task_exchange",
+            "ge_buy", "ge_create_buy", "ge_sell", "ge_fill", "ge_cancel",
+            "task_new", "task_trade", "task_complete", "task_exchange", "task_cancel",
+            "deposit_gold", "withdraw_gold", "npc_buy", "npc_sell",
             "idle", "complete",
         }
         actual = {at.value for at in ActionType}

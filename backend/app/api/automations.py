@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.deps import get_user_character_names
 from app.database import async_session_factory
 from app.engine.manager import AutomationManager
 from app.models.automation import AutomationConfig, AutomationLog, AutomationRun
@@ -46,9 +47,14 @@ def _get_manager(request: Request) -> AutomationManager:
 
 @router.get("/", response_model=list[AutomationConfigResponse])
 async def list_configs(request: Request) -> list[AutomationConfigResponse]:
-    """List all automation configurations with their current status."""
+    """List automation configurations belonging to the current user."""
+    user_chars = await get_user_character_names(request)
     async with async_session_factory() as db:
-        stmt = select(AutomationConfig).order_by(AutomationConfig.id)
+        stmt = (
+            select(AutomationConfig)
+            .where(AutomationConfig.character_name.in_(user_chars))
+            .order_by(AutomationConfig.id)
+        )
         result = await db.execute(stmt)
         configs = result.scalars().all()
         return [AutomationConfigResponse.model_validate(c) for c in configs]

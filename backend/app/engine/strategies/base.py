@@ -1,9 +1,16 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.engine.pathfinder import Pathfinder
 from app.schemas.game import CharacterSchema
+
+if TYPE_CHECKING:
+    from app.engine.decision.equipment_optimizer import EquipmentOptimizer
+    from app.schemas.game import ItemSchema
 
 
 class ActionType(str, Enum):
@@ -21,12 +28,19 @@ class ActionType(str, Enum):
     CRAFT = "craft"
     RECYCLE = "recycle"
     GE_BUY = "ge_buy"
+    GE_CREATE_BUY = "ge_create_buy"
     GE_SELL = "ge_sell"
+    GE_FILL = "ge_fill"
     GE_CANCEL = "ge_cancel"
     TASK_NEW = "task_new"
     TASK_TRADE = "task_trade"
     TASK_COMPLETE = "task_complete"
     TASK_EXCHANGE = "task_exchange"
+    TASK_CANCEL = "task_cancel"
+    DEPOSIT_GOLD = "deposit_gold"
+    WITHDRAW_GOLD = "withdraw_gold"
+    NPC_BUY = "npc_buy"
+    NPC_SELL = "npc_sell"
     IDLE = "idle"
     COMPLETE = "complete"
 
@@ -49,9 +63,18 @@ class BaseStrategy(ABC):
     Subclasses must implement :meth:`next_action` and :meth:`get_state`.
     """
 
-    def __init__(self, config: dict, pathfinder: Pathfinder) -> None:
+    def __init__(
+        self,
+        config: dict,
+        pathfinder: Pathfinder,
+        equipment_optimizer: EquipmentOptimizer | None = None,
+        available_items: list[ItemSchema] | None = None,
+    ) -> None:
         self.config = config
         self.pathfinder = pathfinder
+        self._equipment_optimizer = equipment_optimizer
+        self._available_items = available_items or []
+        self._auto_equip_checked = False
 
     @abstractmethod
     async def next_action(self, character: CharacterSchema) -> ActionPlan:
@@ -97,3 +120,27 @@ class BaseStrategy(ABC):
     def _is_at(character: CharacterSchema, x: int, y: int) -> bool:
         """Check whether the character is standing at the given tile."""
         return character.x == x and character.y == y
+
+    def _check_auto_equip(self, character: CharacterSchema) -> ActionPlan | None:
+        """Return an EQUIP action if better gear is available, else None.
+
+        Only runs once per strategy lifetime to avoid re-checking every tick.
+        """
+        if self._auto_equip_checked:
+            return None
+        self._auto_equip_checked = True
+
+        if self._equipment_optimizer is None or not self._available_items:
+            return None
+
+        analysis = self._equipment_optimizer.suggest_equipment(
+            character, self._available_items
+        )
+        if analysis.suggestions:
+            best = analysis.suggestions[0]
+            return ActionPlan(
+                ActionType.EQUIP,
+                params={"code": best.suggested_item_code, "slot": best.slot},
+                reason=f"Auto-equip: {best.reason}",
+            )
+        return None

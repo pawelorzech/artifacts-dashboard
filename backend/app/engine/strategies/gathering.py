@@ -1,9 +1,16 @@
+from __future__ import annotations
+
 import logging
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.engine.pathfinder import Pathfinder
 from app.engine.strategies.base import ActionPlan, ActionType, BaseStrategy
 from app.schemas.game import CharacterSchema
+
+if TYPE_CHECKING:
+    from app.engine.decision.resource_selector import ResourceSelector
+    from app.schemas.game import ResourceSchema
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +43,24 @@ class GatheringStrategy(BaseStrategy):
         - max_loops: int (default 0 = infinite)
     """
 
-    def __init__(self, config: dict, pathfinder: Pathfinder) -> None:
+    def __init__(
+        self,
+        config: dict,
+        pathfinder: Pathfinder,
+        resource_selector: ResourceSelector | None = None,
+        resources_data: list[ResourceSchema] | None = None,
+    ) -> None:
         super().__init__(config, pathfinder)
         self._state = _GatherState.MOVE_TO_RESOURCE
 
         # Parsed config with defaults
-        self._resource_code: str = config["resource_code"]
+        self._resource_code: str = config.get("resource_code", "")
         self._deposit_on_full: bool = config.get("deposit_on_full", True)
         self._max_loops: int = config.get("max_loops", 0)
+
+        # Decision modules
+        self._resource_selector = resource_selector
+        self._resources_data = resources_data or []
 
         # Runtime counters
         self._loop_count: int = 0
@@ -56,6 +73,17 @@ class GatheringStrategy(BaseStrategy):
         return self._state.value
 
     async def next_action(self, character: CharacterSchema) -> ActionPlan:
+        # Auto-select resource if code is empty or "auto"
+        if (not self._resource_code or self._resource_code == "auto") and self._resource_selector and self._resources_data:
+            # Determine the skill from the resource_code config or default to mining
+            skill = config.get("skill", "") if (config := self.config) else ""
+            if not skill:
+                skill = "mining"
+            selection = self._resource_selector.select_optimal(character, self._resources_data, skill)
+            if selection:
+                self._resource_code = selection.resource.code
+                logger.info("Auto-selected resource %s for character %s", selection.resource.code, character.name)
+
         # Check loop limit
         if self._max_loops > 0 and self._loop_count >= self._max_loops:
             return ActionPlan(

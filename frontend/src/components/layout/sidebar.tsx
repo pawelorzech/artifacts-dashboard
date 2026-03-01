@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
   Zap,
   ScrollText,
+  AlertTriangle,
   BarChart3,
   Settings,
   ChevronLeft,
@@ -35,6 +36,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   ArrowLeftRight,
   Zap,
   ScrollText,
+  AlertTriangle,
   BarChart3,
   Settings,
 };

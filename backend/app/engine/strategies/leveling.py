@@ -1,9 +1,18 @@
+from __future__ import annotations
+
 import logging
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.engine.pathfinder import Pathfinder
 from app.engine.strategies.base import ActionPlan, ActionType, BaseStrategy
 from app.schemas.game import CharacterSchema, ResourceSchema
+
+if TYPE_CHECKING:
+    from app.engine.decision.equipment_optimizer import EquipmentOptimizer
+    from app.engine.decision.monster_selector import MonsterSelector
+    from app.engine.decision.resource_selector import ResourceSelector
+    from app.schemas.game import ItemSchema, MonsterSchema
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +53,17 @@ class LevelingStrategy(BaseStrategy):
         config: dict,
         pathfinder: Pathfinder,
         resources_data: list[ResourceSchema] | None = None,
+        monsters_data: list[MonsterSchema] | None = None,
+        resource_selector: ResourceSelector | None = None,
+        monster_selector: MonsterSelector | None = None,
+        equipment_optimizer: EquipmentOptimizer | None = None,
+        available_items: list[ItemSchema] | None = None,
     ) -> None:
-        super().__init__(config, pathfinder)
+        super().__init__(
+            config, pathfinder,
+            equipment_optimizer=equipment_optimizer,
+            available_items=available_items,
+        )
         self._state = _LevelingState.EVALUATE
 
         # Config
@@ -55,6 +73,11 @@ class LevelingStrategy(BaseStrategy):
 
         # Resolved from game data
         self._resources_data: list[ResourceSchema] = resources_data or []
+        self._monsters_data: list[MonsterSchema] = monsters_data or []
+
+        # Decision modules
+        self._resource_selector = resource_selector
+        self._monster_selector = monster_selector
 
         # Runtime state
         self._chosen_skill: str = ""
@@ -75,6 +98,11 @@ class LevelingStrategy(BaseStrategy):
 
     async def next_action(self, character: CharacterSchema) -> ActionPlan:
         self._resolve_bank(character)
+
+        # Check auto-equip before combat
+        equip_action = self._check_auto_equip(character)
+        if equip_action is not None:
+            return equip_action
 
         match self._state:
             case _LevelingState.EVALUATE:
@@ -286,6 +314,17 @@ class LevelingStrategy(BaseStrategy):
         return self._handle_evaluate(character)
 
     # ------------------------------------------------------------------
+    # Location resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_bank(self, character: CharacterSchema) -> None:
+        """Lazily resolve and cache the nearest bank tile position."""
+        if self._bank_pos is None:
+            self._bank_pos = self.pathfinder.find_nearest_by_type(
+                character.x, character.y, "bank"
+            )
+
+    # ------------------------------------------------------------------
     # Skill analysis helpers
     # ------------------------------------------------------------------
 
@@ -322,27 +361,35 @@ class LevelingStrategy(BaseStrategy):
         skill_level: int,
     ) -> None:
         """Choose the best resource to gather for a given skill and level."""
-        # Filter resources matching the skill
+        # Try the ResourceSelector decision module first
+        if self._resource_selector and self._resources_data:
+            selection = self._resource_selector.select_optimal(
+                character, self._resources_data, skill
+            )
+            if selection:
+                self._chosen_resource_code = selection.resource.code
+                self._target_pos = self.pathfinder.find_nearest(
+                    character.x, character.y, "resource", selection.resource.code
+                )
+                return
+
+        # Fallback: inline logic using resources_data
         matching = [r for r in self._resources_data if r.skill == skill]
         if not matching:
-            # Fallback: use pathfinder to find any resource of this skill
             self._target_pos = self.pathfinder.find_nearest_by_type(
                 character.x, character.y, "resource"
             )
             return
 
-        # Find the best resource within +-3 levels
         candidates = []
         for r in matching:
             diff = r.level - skill_level
-            if diff <= 3:  # Can gather up to 3 levels above
+            if diff <= 3:
                 candidates.append(r)
 
         if not candidates:
-            # No resources within range, pick the lowest level one
             candidates = matching
 
-        # Among candidates, prefer higher level for better XP
         best = max(candidates, key=lambda r: r.level if r.level <= skill_level + 3 else -r.level)
         self._chosen_resource_code = best.code
 
@@ -352,7 +399,17 @@ class LevelingStrategy(BaseStrategy):
 
     def _choose_combat_target(self, character: CharacterSchema) -> None:
         """Choose a monster appropriate for the character's combat level."""
-        # Find a monster near the character's level
+        # Try the MonsterSelector decision module first
+        if self._monster_selector and self._monsters_data:
+            selected = self._monster_selector.select_optimal(character, self._monsters_data)
+            if selected:
+                self._chosen_monster_code = selected.code
+                self._target_pos = self.pathfinder.find_nearest(
+                    character.x, character.y, "monster", selected.code
+                )
+                return
+
+        # Fallback: find any nearby monster
         self._chosen_monster_code = ""
         self._target_pos = self.pathfinder.find_nearest_by_type(
             character.x, character.y, "monster"

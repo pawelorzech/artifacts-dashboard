@@ -1,9 +1,17 @@
+from __future__ import annotations
+
 import logging
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.engine.pathfinder import Pathfinder
 from app.engine.strategies.base import ActionPlan, ActionType, BaseStrategy
 from app.schemas.game import CharacterSchema
+
+if TYPE_CHECKING:
+    from app.engine.decision.equipment_optimizer import EquipmentOptimizer
+    from app.engine.decision.monster_selector import MonsterSelector
+    from app.schemas.game import ItemSchema, MonsterSchema
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +51,33 @@ class CombatStrategy(BaseStrategy):
         - deposit_loot: bool (default True)
     """
 
-    def __init__(self, config: dict, pathfinder: Pathfinder) -> None:
-        super().__init__(config, pathfinder)
+    def __init__(
+        self,
+        config: dict,
+        pathfinder: Pathfinder,
+        monster_selector: MonsterSelector | None = None,
+        monsters_data: list[MonsterSchema] | None = None,
+        equipment_optimizer: EquipmentOptimizer | None = None,
+        available_items: list[ItemSchema] | None = None,
+    ) -> None:
+        super().__init__(
+            config, pathfinder,
+            equipment_optimizer=equipment_optimizer,
+            available_items=available_items,
+        )
         self._state = _CombatState.MOVE_TO_MONSTER
 
         # Parsed config with defaults
-        self._monster_code: str = config["monster_code"]
+        self._monster_code: str = config.get("monster_code", "")
         self._heal_threshold: int = config.get("auto_heal_threshold", 50)
         self._heal_method: str = config.get("heal_method", "rest")
         self._consumable_code: str | None = config.get("consumable_code")
         self._min_inv_slots: int = config.get("min_inventory_slots", 3)
         self._deposit_loot: bool = config.get("deposit_loot", True)
+
+        # Decision modules
+        self._monster_selector = monster_selector
+        self._monsters_data = monsters_data or []
 
         # Cached locations (resolved lazily)
         self._monster_pos: tuple[int, int] | None = None
@@ -63,6 +87,18 @@ class CombatStrategy(BaseStrategy):
         return self._state.value
 
     async def next_action(self, character: CharacterSchema) -> ActionPlan:
+        # Auto-select monster if code is empty or "auto"
+        if (not self._monster_code or self._monster_code == "auto") and self._monster_selector and self._monsters_data:
+            selected = self._monster_selector.select_optimal(character, self._monsters_data)
+            if selected:
+                self._monster_code = selected.code
+                logger.info("Auto-selected monster %s for character %s", selected.code, character.name)
+
+        # Check auto-equip on first tick
+        equip_action = self._check_auto_equip(character)
+        if equip_action is not None:
+            return equip_action
+
         # Lazily resolve monster and bank positions
         self._resolve_locations(character)
 

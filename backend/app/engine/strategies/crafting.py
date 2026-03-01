@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 import logging
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.engine.pathfinder import Pathfinder
 from app.engine.strategies.base import ActionPlan, ActionType, BaseStrategy
 from app.schemas.game import CharacterSchema, ItemSchema
+
+if TYPE_CHECKING:
+    from app.schemas.game import ResourceSchema
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +68,7 @@ class CraftingStrategy(BaseStrategy):
         config: dict,
         pathfinder: Pathfinder,
         items_data: list[ItemSchema] | None = None,
+        resources_data: list[ResourceSchema] | None = None,
     ) -> None:
         super().__init__(config, pathfinder)
         self._state = _CraftState.CHECK_MATERIALS
@@ -80,6 +87,9 @@ class CraftingStrategy(BaseStrategy):
         self._craft_skill: str = ""
         self._craft_level: int = 0
         self._recipe_resolved: bool = False
+
+        # Game data for gathering resolution
+        self._resources_data: list[ResourceSchema] = resources_data or []
 
         # If items data is provided, resolve the recipe immediately
         if items_data:
@@ -186,11 +196,18 @@ class CraftingStrategy(BaseStrategy):
         # Withdraw the first missing material
         code, needed_qty = next(iter(missing.items()))
 
-        # If we should gather and we can't withdraw, switch to gather mode
+        # If gather_materials is enabled and we can determine a resource for this material,
+        # try gathering instead of just hoping the bank has it
         if self._gather_materials:
-            # We'll try to withdraw; if it fails the runner will handle the error
-            # and we can switch to gathering mode. For now, attempt the withdraw.
-            pass
+            resource_code = self._find_resource_for_material(code)
+            if resource_code:
+                self._gather_resource_code = resource_code
+                self._gather_pos = self.pathfinder.find_nearest(
+                    character.x, character.y, "resource", resource_code
+                )
+                if self._gather_pos:
+                    self._state = _CraftState.GATHER_MATERIALS
+                    return self._handle_gather_materials(character)
 
         return ActionPlan(
             ActionType.WITHDRAW_ITEM,
@@ -382,6 +399,14 @@ class CraftingStrategy(BaseStrategy):
                 missing[code] = needed - have
 
         return missing
+
+    def _find_resource_for_material(self, material_code: str) -> str | None:
+        """Look up which resource drops the needed material."""
+        for resource in self._resources_data:
+            for drop in resource.drops:
+                if drop.code == material_code:
+                    return resource.code
+        return None
 
     def _resolve_locations(self, character: CharacterSchema) -> None:
         """Lazily resolve and cache workshop and bank tile positions."""

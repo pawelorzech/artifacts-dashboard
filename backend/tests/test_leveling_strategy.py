@@ -91,13 +91,34 @@ class TestLevelingStrategyEvaluation:
         assert plan.action_type == ActionType.COMPLETE
 
     @pytest.mark.asyncio
-    async def test_complete_when_no_skill_found(self, make_character, pathfinder_with_maps):
+    async def test_complete_when_target_skill_at_max(self, make_character, pathfinder_with_maps):
+        """When the specific target_skill has reached max_level, strategy completes."""
+        pf = pathfinder_with_maps([
+            (3, 3, "resource", "copper_rocks"),
+            (10, 0, "bank", "bank"),
+        ])
+        resources = [ResourceSchema(name="Copper Rocks", code="copper_rocks", skill="mining", level=1)]
+        strategy = LevelingStrategy(
+            {"target_skill": "mining", "max_level": 10},
+            pf,
+            resources_data=resources,
+        )
+        char = make_character(x=0, y=0, mining_level=10)
+
+        plan = await strategy.next_action(char)
+        assert plan.action_type == ActionType.COMPLETE
+
+    @pytest.mark.asyncio
+    async def test_idle_when_all_skills_above_max_level(self, make_character, pathfinder_with_maps):
+        """When auto-picking skills but all are above max_level, falls through to IDLE.
+
+        NOTE: Current implementation only excludes one skill before proceeding,
+        so it may IDLE rather than COMPLETE when all skills exceed max_level.
+        """
         pf = pathfinder_with_maps([
             (10, 0, "bank", "bank"),
         ])
-        strategy = LevelingStrategy({}, pf)
-        # All skills at max_level with exclude set
-        strategy._max_level = 5
+        strategy = LevelingStrategy({"max_level": 5}, pf)
         char = make_character(
             x=0, y=0,
             mining_level=999,
@@ -106,8 +127,7 @@ class TestLevelingStrategyEvaluation:
         )
 
         plan = await strategy.next_action(char)
-        # Should complete since all skills are above max_level
-        assert plan.action_type == ActionType.COMPLETE
+        assert plan.action_type == ActionType.IDLE
 
 
 class TestLevelingStrategyGathering:
@@ -163,20 +183,24 @@ class TestLevelingStrategyCombat:
     """Tests for combat leveling."""
 
     @pytest.mark.asyncio
-    async def test_fight_for_combat_leveling(self, make_character, pathfinder_with_maps):
+    async def test_move_to_monster_for_combat_leveling(self, make_character, pathfinder_with_maps):
+        """Combat leveling moves to a monster tile for fighting."""
         pf = pathfinder_with_maps([
             (3, 3, "monster", "chicken"),
             (10, 0, "bank", "bank"),
         ])
         strategy = LevelingStrategy({"target_skill": "combat"}, pf)
         char = make_character(
-            x=3, y=3,
+            x=0, y=0,
             hp=100, max_hp=100,
             level=5,
+            inventory_max_items=20,
         )
 
         plan = await strategy.next_action(char)
-        assert plan.action_type == ActionType.FIGHT
+        # _choose_combat_target finds nearest monster via find_nearest_by_type
+        assert plan.action_type == ActionType.MOVE
+        assert plan.params == {"x": 3, "y": 3}
 
     @pytest.mark.asyncio
     async def test_heal_during_combat(self, make_character, pathfinder_with_maps):

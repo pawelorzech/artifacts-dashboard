@@ -251,6 +251,161 @@ export interface LevelingConfig {
   target_skill?: string;
 }
 
+// ---------- Workflow Types ----------
+
+export interface TransitionCondition {
+  type:
+    | "strategy_complete"
+    | "loops_completed"
+    | "inventory_full"
+    | "inventory_item_count"
+    | "bank_item_count"
+    | "skill_level"
+    | "gold_amount"
+    | "actions_count"
+    | "timer";
+  operator: ">=" | "<=" | "==" | ">" | "<";
+  value: number;
+  item_code: string;
+  skill: string;
+  seconds: number;
+}
+
+export interface WorkflowStep {
+  id: string;
+  name: string;
+  strategy_type:
+    | "combat"
+    | "gathering"
+    | "crafting"
+    | "trading"
+    | "task"
+    | "leveling";
+  config: Record<string, unknown>;
+  transition: TransitionCondition | null;
+}
+
+export interface WorkflowConfig {
+  id: number;
+  name: string;
+  character_name: string;
+  description: string;
+  steps: WorkflowStep[];
+  loop: boolean;
+  max_loops: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRun {
+  id: number;
+  workflow_id: number;
+  status: "running" | "paused" | "stopped" | "completed" | "error";
+  current_step_index: number;
+  current_step_id: string;
+  loop_count: number;
+  total_actions_count: number;
+  step_actions_count: number;
+  started_at: string;
+  stopped_at: string | null;
+  error_message: string | null;
+  step_history: Record<string, unknown>[];
+}
+
+export interface WorkflowStatus {
+  workflow_id: number;
+  character_name: string;
+  status: string;
+  run_id: number | null;
+  current_step_index: number;
+  current_step_id: string;
+  total_steps: number;
+  loop_count: number;
+  total_actions_count: number;
+  step_actions_count: number;
+  strategy_state: string;
+}
+
+// ---------- Pipeline Types ----------
+
+export interface CharacterStep {
+  id: string;
+  character_name: string;
+  strategy_type:
+    | "combat"
+    | "gathering"
+    | "crafting"
+    | "trading"
+    | "task"
+    | "leveling";
+  config: Record<string, unknown>;
+  transition: TransitionCondition | null;
+}
+
+export interface PipelineStage {
+  id: string;
+  name: string;
+  character_steps: CharacterStep[];
+}
+
+export interface PipelineConfig {
+  id: number;
+  name: string;
+  description: string;
+  stages: PipelineStage[];
+  loop: boolean;
+  max_loops: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineRun {
+  id: number;
+  pipeline_id: number;
+  status: "running" | "paused" | "stopped" | "completed" | "error";
+  current_stage_index: number;
+  current_stage_id: string;
+  loop_count: number;
+  total_actions_count: number;
+  character_states: Record<
+    string,
+    {
+      status: string;
+      step_id: string;
+      actions_count: number;
+      strategy_state: string;
+      error: string | null;
+    }
+  >;
+  stage_history: Record<string, unknown>[];
+  started_at: string;
+  stopped_at: string | null;
+  error_message: string | null;
+}
+
+export interface PipelineCharacterState {
+  character_name: string;
+  status: string;
+  step_id: string;
+  actions_count: number;
+  strategy_state: string;
+  error: string | null;
+}
+
+export interface PipelineStatus {
+  pipeline_id: number;
+  status: string;
+  run_id: number | null;
+  current_stage_index: number;
+  current_stage_id: string;
+  total_stages: number;
+  loop_count: number;
+  total_actions_count: number;
+  character_states: PipelineCharacterState[];
+}
+
 // ---------- Grand Exchange Types ----------
 
 export interface GEOrder {
@@ -319,6 +474,14 @@ export interface ActionLog {
   details: Record<string, unknown>;
   success: boolean;
   created_at: string;
+  cooldown?: number;
+}
+
+export interface PaginatedLogs {
+  logs: ActionLog[];
+  total: number;
+  page: number;
+  pages: number;
 }
 
 export interface TimeSeriesPoint {
@@ -331,4 +494,34 @@ export interface AnalyticsData {
   xp_history: TimeSeriesPoint[];
   gold_history: TimeSeriesPoint[];
   actions_per_hour: number;
+}
+
+// ---------- App Error Types ----------
+
+export interface AppError {
+  id: number;
+  severity: string;
+  source: string;
+  error_type: string;
+  message: string;
+  stack_trace?: string | null;
+  context?: Record<string, unknown> | null;
+  correlation_id?: string | null;
+  resolved: boolean;
+  created_at: string;
+}
+
+export interface PaginatedErrors {
+  errors: AppError[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export interface ErrorStats {
+  total: number;
+  unresolved: number;
+  last_hour: number;
+  by_severity: Record<string, number>;
+  by_source: Record<string, number>;
 }

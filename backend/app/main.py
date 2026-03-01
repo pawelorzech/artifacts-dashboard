@@ -1,12 +1,29 @@
 import asyncio
+import json
 import logging
+import sys
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+
+# ---- Sentry (conditional) ----
+if settings.sentry_dsn:
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            traces_sample_rate=0.2,
+            send_default_pii=False,
+        )
+    except Exception:
+        pass  # Sentry is optional; don't block startup
 from app.database import async_session_factory, engine, Base
 from app.services.artifacts_client import ArtifactsClient
 from app.services.character_service import CharacterService
@@ -16,8 +33,11 @@ from app.services.game_data_cache import GameDataCacheService
 from app.models import game_cache as _game_cache_model  # noqa: F401
 from app.models import character_snapshot as _snapshot_model  # noqa: F401
 from app.models import automation as _automation_model  # noqa: F401
+from app.models import workflow as _workflow_model  # noqa: F401
 from app.models import price_history as _price_history_model  # noqa: F401
 from app.models import event_log as _event_log_model  # noqa: F401
+from app.models import app_error as _app_error_model  # noqa: F401
+from app.models import pipeline as _pipeline_model  # noqa: F401
 
 # Import routers
 from app.api.characters import router as characters_router
@@ -30,10 +50,16 @@ from app.api.exchange import router as exchange_router
 from app.api.events import router as events_router
 from app.api.logs import router as logs_router
 from app.api.auth import router as auth_router
+from app.api.workflows import router as workflows_router
+from app.api.errors import router as errors_router
+from app.api.pipelines import router as pipelines_router
 
 # Automation engine
 from app.engine.pathfinder import Pathfinder
 from app.engine.manager import AutomationManager
+
+# Error-handling middleware
+from app.middleware.error_handler import ErrorHandlerMiddleware
 
 # Exchange service
 from app.services.exchange_service import ExchangeService
@@ -45,10 +71,29 @@ from app.websocket.handlers import GameEventHandler
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+
+class _JSONFormatter(logging.Formatter):
+    """Structured JSON log formatter for production."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[1]:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry, default=str)
+
+
+_handler = logging.StreamHandler(sys.stdout)
+if settings.environment != "development":
+    _handler.setFormatter(_JSONFormatter())
+else:
+    _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 
 
 async def _snapshot_loop(
@@ -218,6 +263,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -237,6 +283,9 @@ app.include_router(exchange_router)
 app.include_router(events_router)
 app.include_router(logs_router)
 app.include_router(auth_router)
+app.include_router(workflows_router)
+app.include_router(errors_router)
+app.include_router(pipelines_router)
 
 
 @app.get("/health")

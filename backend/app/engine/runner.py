@@ -5,13 +5,16 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.engine.action_executor import execute_action
 from app.engine.cooldown import CooldownTracker
 from app.engine.strategies.base import ActionPlan, ActionType, BaseStrategy
 from app.models.automation import AutomationLog, AutomationRun
 from app.services.artifacts_client import ArtifactsClient
+from app.services.error_service import hash_token, log_error
 
 if TYPE_CHECKING:
     from app.websocket.event_bus import EventBus
@@ -235,6 +238,62 @@ class AutomationRunner:
                     self._consecutive_errors = 0
                 except asyncio.CancelledError:
                     raise
+                except httpx.HTTPStatusError as exc:
+                    status = exc.response.status_code
+                    # 498 = character in cooldown – not a real error,
+                    # just wait and retry without incrementing the counter.
+                    if status == 498:
+                        logger.info(
+                            "Cooldown error for config %d, will retry",
+                            self._config_id,
+                        )
+                        await asyncio.sleep(_ERROR_RETRY_DELAY)
+                        continue
+                    # Other HTTP errors – treat as real failures
+                    self._consecutive_errors += 1
+                    logger.exception(
+                        "HTTP %d in automation loop for config %d (error %d/%d): %s",
+                        status,
+                        self._config_id,
+                        self._consecutive_errors,
+                        _MAX_CONSECUTIVE_ERRORS,
+                        exc,
+                    )
+                    await log_error(
+                        self._db_factory,
+                        severity="error",
+                        source="automation",
+                        exc=exc,
+                        context={
+                            "config_id": self._config_id,
+                            "character": self._character_name,
+                            "run_id": self._run_id,
+                            "consecutive_errors": self._consecutive_errors,
+                            "http_status": status,
+                        },
+                    )
+                    await self._log_action(
+                        ActionPlan(ActionType.IDLE, reason=str(exc)),
+                        success=False,
+                    )
+                    await self._publish_action(
+                        "error",
+                        success=False,
+                        details={"error": str(exc)},
+                    )
+                    if self._consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                        logger.error(
+                            "Too many consecutive errors for config %d, stopping",
+                            self._config_id,
+                        )
+                        await self._finalize_run(
+                            status="error",
+                            error_message=f"Stopped after {_MAX_CONSECUTIVE_ERRORS} consecutive errors. Last: {exc}",
+                        )
+                        self._running = False
+                        await self._publish_status("error")
+                        return
+                    await asyncio.sleep(_ERROR_RETRY_DELAY)
                 except Exception as exc:
                     self._consecutive_errors += 1
                     logger.exception(
@@ -243,6 +302,20 @@ class AutomationRunner:
                         self._consecutive_errors,
                         _MAX_CONSECUTIVE_ERRORS,
                         exc,
+                    )
+                    token_hash = hash_token(self._client._token) if self._client._token else None
+                    await log_error(
+                        self._db_factory,
+                        severity="error",
+                        source="automation",
+                        exc=exc,
+                        context={
+                            "config_id": self._config_id,
+                            "character": self._character_name,
+                            "run_id": self._run_id,
+                            "consecutive_errors": self._consecutive_errors,
+                        },
+                        user_token_hash=token_hash,
                     )
                     await self._log_action(
                         ActionPlan(ActionType.IDLE, reason=str(exc)),
@@ -336,96 +409,7 @@ class AutomationRunner:
 
     async def _execute_action(self, plan: ActionPlan) -> dict[str, Any]:
         """Dispatch an action plan to the appropriate client method."""
-        match plan.action_type:
-            case ActionType.MOVE:
-                return await self._client.move(
-                    self._character_name,
-                    plan.params["x"],
-                    plan.params["y"],
-                )
-            case ActionType.FIGHT:
-                return await self._client.fight(self._character_name)
-            case ActionType.GATHER:
-                return await self._client.gather(self._character_name)
-            case ActionType.REST:
-                return await self._client.rest(self._character_name)
-            case ActionType.EQUIP:
-                return await self._client.equip(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params["slot"],
-                    plan.params.get("quantity", 1),
-                )
-            case ActionType.UNEQUIP:
-                return await self._client.unequip(
-                    self._character_name,
-                    plan.params["slot"],
-                    plan.params.get("quantity", 1),
-                )
-            case ActionType.USE_ITEM:
-                return await self._client.use_item(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params.get("quantity", 1),
-                )
-            case ActionType.DEPOSIT_ITEM:
-                return await self._client.deposit_item(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params["quantity"],
-                )
-            case ActionType.WITHDRAW_ITEM:
-                return await self._client.withdraw_item(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params["quantity"],
-                )
-            case ActionType.CRAFT:
-                return await self._client.craft(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params.get("quantity", 1),
-                )
-            case ActionType.RECYCLE:
-                return await self._client.recycle(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params.get("quantity", 1),
-                )
-            case ActionType.GE_BUY:
-                return await self._client.ge_buy(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params["quantity"],
-                    plan.params["price"],
-                )
-            case ActionType.GE_SELL:
-                return await self._client.ge_sell_order(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params["quantity"],
-                    plan.params["price"],
-                )
-            case ActionType.GE_CANCEL:
-                return await self._client.ge_cancel(
-                    self._character_name,
-                    plan.params["order_id"],
-                )
-            case ActionType.TASK_NEW:
-                return await self._client.task_new(self._character_name)
-            case ActionType.TASK_TRADE:
-                return await self._client.task_trade(
-                    self._character_name,
-                    plan.params["code"],
-                    plan.params["quantity"],
-                )
-            case ActionType.TASK_COMPLETE:
-                return await self._client.task_complete(self._character_name)
-            case ActionType.TASK_EXCHANGE:
-                return await self._client.task_exchange(self._character_name)
-            case _:
-                logger.warning("Unhandled action type: %s", plan.action_type)
-                return {}
+        return await execute_action(self._client, self._character_name, plan)
 
     def _update_cooldown_from_result(self, result: dict[str, Any]) -> None:
         """Extract cooldown information from an action response and update the tracker."""

@@ -3,17 +3,13 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from httpx import HTTPStatusError
 
+from app.api.deps import get_user_client
 from app.schemas.game import DashboardData
-from app.services.artifacts_client import ArtifactsClient
 from app.services.character_service import CharacterService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
-
-
-def _get_client(request: Request) -> ArtifactsClient:
-    return request.app.state.artifacts_client
 
 
 def _get_service(request: Request) -> CharacterService:
@@ -23,7 +19,7 @@ def _get_service(request: Request) -> CharacterService:
 @router.get("/dashboard", response_model=DashboardData)
 async def get_dashboard(request: Request) -> DashboardData:
     """Return aggregated dashboard data: all characters + server status."""
-    client = _get_client(request)
+    client = get_user_client(request)
     service = _get_service(request)
 
     try:

@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     data_rate_limit: int = 20  # data requests per window
     data_rate_window: float = 1.0  # seconds
 
+    # Observability
+    sentry_dsn: str = ""
+    environment: str = "development"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

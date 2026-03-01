@@ -6,17 +6,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from httpx import HTTPStatusError
 
+from app.api.deps import get_user_client
 from app.database import async_session_factory
-from app.services.artifacts_client import ArtifactsClient
 from app.services.exchange_service import ExchangeService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/exchange", tags=["exchange"])
-
-
-def _get_client(request: Request) -> ArtifactsClient:
-    return request.app.state.artifacts_client
 
 
 def _get_exchange_service(request: Request) -> ExchangeService:
@@ -36,7 +32,7 @@ async def browse_orders(
     type: str | None = Query(default=None, description="Filter by order type (sell or buy)"),
 ) -> dict[str, Any]:
     """Browse all active Grand Exchange orders (public market data)."""
-    client = _get_client(request)
+    client = get_user_client(request)
     service = _get_exchange_service(request)
 
     try:
@@ -53,7 +49,7 @@ async def browse_orders(
 @router.get("/my-orders")
 async def get_my_orders(request: Request) -> dict[str, Any]:
     """Get the authenticated account's own active GE orders."""
-    client = _get_client(request)
+    client = get_user_client(request)
     service = _get_exchange_service(request)
 
     try:
@@ -70,7 +66,7 @@ async def get_my_orders(request: Request) -> dict[str, Any]:
 @router.get("/history")
 async def get_history(request: Request) -> dict[str, Any]:
     """Get the authenticated account's GE transaction history."""
-    client = _get_client(request)
+    client = get_user_client(request)
     service = _get_exchange_service(request)
 
     try:
@@ -87,7 +83,7 @@ async def get_history(request: Request) -> dict[str, Any]:
 @router.get("/sell-history/{item_code}")
 async def get_sell_history(item_code: str, request: Request) -> dict[str, Any]:
     """Get public sale history for a specific item (last 7 days from API)."""
-    client = _get_client(request)
+    client = get_user_client(request)
     service = _get_exchange_service(request)
 
     try:

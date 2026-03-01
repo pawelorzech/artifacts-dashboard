@@ -11,6 +11,8 @@ import {
   Loader2,
   LayoutGrid,
   List,
+  GitBranch,
+  Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,8 +39,14 @@ import {
   useAutomationStatuses,
   useDeleteAutomation,
 } from "@/hooks/use-automations";
+import { useWorkflows } from "@/hooks/use-workflows";
+import { usePipelines } from "@/hooks/use-pipelines";
 import { RunControls } from "@/components/automation/run-controls";
 import { AutomationGallery } from "@/components/automation/automation-gallery";
+import { WorkflowList } from "@/components/workflow/workflow-list";
+import { WorkflowTemplateGallery } from "@/components/workflow/workflow-template-gallery";
+import { PipelineList } from "@/components/pipeline/pipeline-list";
+import { PipelineTemplateGallery } from "@/components/pipeline/pipeline-template-gallery";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +72,8 @@ export default function AutomationsPage() {
   const router = useRouter();
   const { data: automations, isLoading, error } = useAutomations();
   const { data: statuses } = useAutomationStatuses();
+  const { data: workflows } = useWorkflows();
+  const { data: pipelines } = usePipelines();
   const deleteMutation = useDeleteAutomation();
   const [deleteTarget, setDeleteTarget] = useState<{
     id: number;
@@ -98,10 +108,26 @@ export default function AutomationsPage() {
             Manage automated strategies for your characters
           </p>
         </div>
-        <Button onClick={() => router.push("/automations/new")}>
-          <Plus className="size-4" />
-          New Automation
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push("/automations/pipelines/new")}
+          >
+            <Network className="size-4" />
+            New Pipeline
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/automations/workflows/new")}
+          >
+            <GitBranch className="size-4" />
+            New Workflow
+          </Button>
+          <Button onClick={() => router.push("/automations/new")}>
+            <Plus className="size-4" />
+            New Automation
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="gallery">
@@ -119,10 +145,30 @@ export default function AutomationsPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="workflows" className="gap-1.5">
+            <GitBranch className="size-3.5" />
+            Workflows
+            {workflows && workflows.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                {workflows.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="pipelines" className="gap-1.5">
+            <Network className="size-3.5" />
+            Pipelines
+            {pipelines && pipelines.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
+                {pipelines.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="gallery" className="mt-6">
+        <TabsContent value="gallery" className="mt-6 space-y-8">
           <AutomationGallery />
+          <WorkflowTemplateGallery />
+          <PipelineTemplateGallery />
         </TabsContent>
 
         <TabsContent value="active" className="mt-6">
@@ -230,6 +276,14 @@ export default function AutomationsPage() {
               </Table>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="workflows" className="mt-6">
+          <WorkflowList />
+        </TabsContent>
+
+        <TabsContent value="pipelines" className="mt-6">
+          <PipelineList />
         </TabsContent>
       </Tabs>
 
