@@ -7,6 +7,7 @@ import {
   useEffect,
   useCallback,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   setAuthToken,
   type AuthStatus,
@@ -33,6 +34,7 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,6 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const result = await setAuthToken(token);
         if (result.success) {
           localStorage.setItem(STORAGE_KEY, token);
+          // Clear all cached data so the new user gets fresh data
+          queryClient.clear();
           setStatus({ has_token: true, source: "user" });
           return { success: true };
         }
@@ -65,13 +69,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
     },
-    []
+    [queryClient]
   );
 
   const handleRemoveToken = useCallback(async () => {
     localStorage.removeItem(STORAGE_KEY);
+    queryClient.clear();
     setStatus({ has_token: false, source: "none" });
-  }, []);
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider

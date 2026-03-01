@@ -208,9 +208,10 @@ async def resume_automation(config_id: int, request: Request) -> None:
 
 @router.get("/status/all", response_model=list[AutomationStatusResponse])
 async def get_all_statuses(request: Request) -> list[AutomationStatusResponse]:
-    """Get live status for all active automations."""
+    """Get live status for active automations belonging to the current user."""
     manager = _get_manager(request)
-    return manager.get_all_statuses()
+    user_chars = set(await get_user_character_names(request))
+    return [s for s in manager.get_all_statuses() if s.character_name in user_chars]
 
 
 @router.get("/{config_id}/status", response_model=AutomationStatusResponse)

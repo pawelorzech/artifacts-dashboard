@@ -83,9 +83,10 @@ async def create_workflow(
 
 @router.get("/status/all", response_model=list[WorkflowStatusResponse])
 async def get_all_workflow_statuses(request: Request) -> list[WorkflowStatusResponse]:
-    """Get live status for all active workflows."""
+    """Get live status for active workflows belonging to the current user."""
     manager = _get_manager(request)
-    return manager.get_all_workflow_statuses()
+    user_chars = set(await get_user_character_names(request))
+    return [s for s in manager.get_all_workflow_statuses() if s.character_name in user_chars]
 
 
 @router.get("/{workflow_id}", response_model=WorkflowConfigDetailResponse)

@@ -91,9 +91,13 @@ async def create_pipeline(
 
 @router.get("/status/all", response_model=list[PipelineStatusResponse])
 async def get_all_pipeline_statuses(request: Request) -> list[PipelineStatusResponse]:
-    """Get live status for all active pipelines."""
+    """Get live status for active pipelines belonging to the current user."""
     manager = _get_manager(request)
-    return manager.get_all_pipeline_statuses()
+    user_chars = set(await get_user_character_names(request))
+    return [
+        s for s in manager.get_all_pipeline_statuses()
+        if any(cs.character_name in user_chars for cs in s.character_states)
+    ]
 
 
 @router.get("/{pipeline_id}", response_model=PipelineConfigDetailResponse)
