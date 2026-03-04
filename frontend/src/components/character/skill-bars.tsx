@@ -19,6 +19,7 @@ export function SkillBars({ character }: SkillBarsProps) {
     ...skill,
     level: character[`${skill.key}_level` as keyof Character] as number,
     xp: character[`${skill.key}_xp` as keyof Character] as number,
+    maxXp: (character[`${skill.key}_max_xp` as keyof Character] as number) || 0,
   })).sort((a, b) => b.level - a.level);
 
   return (
@@ -44,12 +45,12 @@ export function SkillBars({ character }: SkillBarsProps) {
                 <div
                   className={`h-full rounded-full ${SKILL_COLOR_MAP[skill.color]} opacity-80 transition-all`}
                   style={{
-                    width: `${Math.min(100, skill.xp > 0 ? Math.max(2, (skill.xp % 100)) : 0)}%`,
+                    width: `${Math.min(100, skill.maxXp > 0 ? Math.max(2, (skill.xp / skill.maxXp) * 100) : 0)}%`,
                   }}
                 />
               </div>
-              <span className="text-[10px] text-muted-foreground w-16 text-right shrink-0">
-                {skill.xp.toLocaleString()} XP
+              <span className="text-[10px] text-muted-foreground w-24 text-right shrink-0">
+                {skill.xp.toLocaleString()}{skill.maxXp > 0 ? ` / ${skill.maxXp.toLocaleString()}` : ""} XP
               </span>
             </div>
           </div>

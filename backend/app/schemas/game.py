@@ -136,6 +136,10 @@ class CharacterSchema(BaseModel):
     haste: int = 0
     critical_strike: int = 0
     stamina: int = 0
+    wisdom: int = 0
+    prospecting: int = 0
+    initiative: int = 0
+    threat: int = 0
 
     # Attack stats
     attack_fire: int = 0
@@ -144,6 +148,7 @@ class CharacterSchema(BaseModel):
     attack_air: int = 0
 
     # Damage stats
+    dmg: int = 0
     dmg_fire: int = 0
     dmg_earth: int = 0
     dmg_water: int = 0
@@ -158,13 +163,19 @@ class CharacterSchema(BaseModel):
     # Position
     x: int = 0
     y: int = 0
+    layer: str = "overworld"
+    map_id: int = 0
 
     # Cooldown
     cooldown: int = 0
     cooldown_expiration: datetime | None = None
 
+    # Active effects
+    effects: list[EffectSchema] = Field(default_factory=list)
+
     # Equipment slots
     weapon_slot: str = ""
+    rune_slot: str = ""
     shield_slot: str = ""
     helmet_slot: str = ""
     body_armor_slot: str = ""
@@ -180,6 +191,7 @@ class CharacterSchema(BaseModel):
     utility1_slot_quantity: int = 0
     utility2_slot: str = ""
     utility2_slot_quantity: int = 0
+    bag_slot: str = ""
 
     # Inventory
     inventory_max_items: int = 0
@@ -191,23 +203,31 @@ class CharacterSchema(BaseModel):
     task_progress: int = 0
     task_total: int = 0
 
-    # Skill levels and XP
+    # Skill levels and XP (includes max_xp for progress calculation)
     mining_level: int = 0
     mining_xp: int = 0
+    mining_max_xp: int = 0
     woodcutting_level: int = 0
     woodcutting_xp: int = 0
+    woodcutting_max_xp: int = 0
     fishing_level: int = 0
     fishing_xp: int = 0
+    fishing_max_xp: int = 0
     weaponcrafting_level: int = 0
     weaponcrafting_xp: int = 0
+    weaponcrafting_max_xp: int = 0
     gearcrafting_level: int = 0
     gearcrafting_xp: int = 0
+    gearcrafting_max_xp: int = 0
     jewelrycrafting_level: int = 0
     jewelrycrafting_xp: int = 0
+    jewelrycrafting_max_xp: int = 0
     cooking_level: int = 0
     cooking_xp: int = 0
+    cooking_max_xp: int = 0
     alchemy_level: int = 0
     alchemy_xp: int = 0
+    alchemy_max_xp: int = 0
 
 
 # --- Dashboard ---

@@ -33,7 +33,7 @@ async def get_dashboard(request: Request) -> DashboardData:
     # Server status could be extended later (e.g., ping, event info)
     server_status: dict | None = None
     try:
-        events = await client.get_events()
+        events = await client.get_active_events()
         server_status = {"events": events}
     except Exception:
         logger.warning("Failed to fetch server events for dashboard", exc_info=True)

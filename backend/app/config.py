@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     # Artifacts API
     artifacts_api_url: str = "https://api.artifactsmmo.com"
 
-    # Rate limits
-    action_rate_limit: int = 7  # actions per window
+    # Rate limits (matching Artifacts API: 20 actions/2s, 20 data/1s)
+    action_rate_limit: int = 20  # actions per window
     action_rate_window: float = 2.0  # seconds
     data_rate_limit: int = 20  # data requests per window
     data_rate_window: float = 1.0  # seconds

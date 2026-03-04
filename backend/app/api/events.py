@@ -22,7 +22,7 @@ async def get_active_events(request: Request) -> dict[str, Any]:
     client = get_user_client(request)
 
     try:
-        events = await client.get_events()
+        events = await client.get_active_events()
     except HTTPStatusError as exc:
         raise HTTPException(
             status_code=exc.response.status_code,

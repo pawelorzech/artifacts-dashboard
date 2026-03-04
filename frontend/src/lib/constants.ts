@@ -13,6 +13,7 @@ export type SkillKey = (typeof SKILLS)[number]["key"];
 
 export const EQUIPMENT_SLOTS = [
   { key: "weapon_slot", label: "Weapon" },
+  { key: "rune_slot", label: "Rune" },
   { key: "shield_slot", label: "Shield" },
   { key: "helmet_slot", label: "Helmet" },
   { key: "body_armor_slot", label: "Body Armor" },
@@ -26,6 +27,7 @@ export const EQUIPMENT_SLOTS = [
   { key: "artifact3_slot", label: "Artifact 3" },
   { key: "utility1_slot", label: "Utility 1" },
   { key: "utility2_slot", label: "Utility 2" },
+  { key: "bag_slot", label: "Bag" },
 ] as const;
 
 export type EquipmentSlotKey = (typeof EQUIPMENT_SLOTS)[number]["key"];

@@ -156,8 +156,12 @@ class ArtifactsClient:
                     await asyncio.sleep(retry_after)
                     continue
 
-                # 498 = character in cooldown – wait and retry
+                # 498 = character not found – raise immediately
                 if response.status_code == 498:
+                    response.raise_for_status()
+
+                # 499 = character in cooldown – wait and retry
+                if response.status_code == 499:
                     try:
                         body = response.json()
                         cooldown = body.get("data", {}).get("cooldown", {})
@@ -286,7 +290,7 @@ class ArtifactsClient:
         return [ItemSchema.model_validate(i) for i in result.get("data", [])]
 
     async def get_all_items(self) -> list[ItemSchema]:
-        raw = await self._get_paginated("/items")
+        raw = await self._get_paginated("/items", page_size=10000)
         return [ItemSchema.model_validate(i) for i in raw]
 
     # ------------------------------------------------------------------
@@ -298,7 +302,7 @@ class ArtifactsClient:
         return [MonsterSchema.model_validate(m) for m in result.get("data", [])]
 
     async def get_all_monsters(self) -> list[MonsterSchema]:
-        raw = await self._get_paginated("/monsters")
+        raw = await self._get_paginated("/monsters", page_size=10000)
         return [MonsterSchema.model_validate(m) for m in raw]
 
     # ------------------------------------------------------------------
@@ -310,7 +314,7 @@ class ArtifactsClient:
         return [ResourceSchema.model_validate(r) for r in result.get("data", [])]
 
     async def get_all_resources(self) -> list[ResourceSchema]:
-        raw = await self._get_paginated("/resources")
+        raw = await self._get_paginated("/resources", page_size=10000)
         return [ResourceSchema.model_validate(r) for r in raw]
 
     # ------------------------------------------------------------------
@@ -333,15 +337,21 @@ class ArtifactsClient:
         return [MapSchema.model_validate(m) for m in result.get("data", [])]
 
     async def get_all_maps(self) -> list[MapSchema]:
-        raw = await self._get_paginated("/maps")
+        raw = await self._get_paginated("/maps", page_size=10000)
         return [MapSchema.model_validate(m) for m in raw]
 
     # ------------------------------------------------------------------
     # Data endpoints - Events, Bank, GE
     # ------------------------------------------------------------------
 
-    async def get_events(self) -> list[dict[str, Any]]:
+    async def get_all_events(self) -> list[dict[str, Any]]:
+        """Get all event definitions."""
         result = await self._get("/events")
+        return result.get("data", [])
+
+    async def get_active_events(self) -> list[dict[str, Any]]:
+        """Get currently active game events."""
+        result = await self._get("/events/active")
         return result.get("data", [])
 
     async def get_bank_items(self, page: int = 1, size: int = 100) -> list[dict[str, Any]]:
@@ -428,14 +438,14 @@ class ArtifactsClient:
 
     async def deposit_item(self, name: str, code: str, quantity: int) -> dict[str, Any]:
         result = await self._post_action(
-            f"/my/{name}/action/bank/deposit",
+            f"/my/{name}/action/bank/deposit/item",
             json_body={"code": code, "quantity": quantity},
         )
         return result.get("data", {})
 
     async def withdraw_item(self, name: str, code: str, quantity: int) -> dict[str, Any]:
         result = await self._post_action(
-            f"/my/{name}/action/bank/withdraw",
+            f"/my/{name}/action/bank/withdraw/item",
             json_body={"code": code, "quantity": quantity},
         )
         return result.get("data", {})
